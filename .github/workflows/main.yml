@@ -43,7 +43,7 @@
               docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" -p "${{ secrets.DOCKERHUB_TOKEN }}"
               docker pull hoangleuleu/swp-2025:v0
               docker rm -f dev_nest_graphql || true
-              docker container run -dp 6969:3001 --name dev_nest_graphql hoangleuleu/swp-2025:v0
+              docker container run -dp 8080:3001 --name dev_nest_graphql hoangleuleu/swp-2025:v0
               docker network inspect graphql_network || docker network create graphql_network
               docker network connect graphql_network dev_nest_graphql
               docker image prune -f

@@ -14,7 +14,7 @@ async function bootstrap() {
       forbidNonWhitelisted: false,
     }),
   );
-
+// Cấu hình Swagger
   const config = new DocumentBuilder()
     .setTitle('SWP - Graduation Thesis API')
     .setDescription('API dành cho quản lý sinh viên & khóa luận tốt nghiệp')

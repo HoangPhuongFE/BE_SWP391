@@ -6,7 +6,6 @@ import {
   Param,
   Put,
   Delete,
-  ParseIntPipe,
 } from '@nestjs/common';
 import { StudentService } from '../services/student.service';
 import { CreateStudentDto } from '../dtos/create-student.dto';
@@ -15,11 +14,10 @@ import {
   ApiTags,
   ApiOperation,
   ApiResponse,
-  ApiParam,
   ApiBody,
 } from '@nestjs/swagger';
 
-@ApiTags('students') 
+@ApiTags('students')
 @Controller('students')
 export class StudentController {
   constructor(private readonly studentService: StudentService) {}
@@ -41,24 +39,21 @@ export class StudentController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Lấy thông tin sinh viên theo ID' })
-  @ApiParam({ name: 'id', required: true, example: 1 })
   @ApiResponse({ status: 200, description: 'Chi tiết sinh viên' })
-  findOne(@Param('id', ParseIntPipe) id: number) {
+  findOne(@Param('id') id: string) {
     return this.studentService.findOne(id);
   }
 
   @Put(':id')
   @ApiOperation({ summary: 'Cập nhật thông tin sinh viên' })
-  @ApiParam({ name: 'id', required: true, example: 1 })
   @ApiBody({ type: UpdateStudentDto })
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateStudentDto) {
+  update(@Param('id') id: string, @Body() dto: UpdateStudentDto) {
     return this.studentService.update(id, dto);
   }
 
   @Delete(':id')
   @ApiOperation({ summary: 'Xóa sinh viên theo ID' })
-  @ApiParam({ name: 'id', required: true, example: 1 })
-  remove(@Param('id', ParseIntPipe) id: number) {
+  remove(@Param('id') id: string) {
     return this.studentService.remove(id);
   }
 }

@@ -5,6 +5,7 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  app.setGlobalPrefix('api');
 
   //  Cấu hình đầy đủ ValidationPipe
   app.useGlobalPipes(
@@ -24,7 +25,8 @@ async function bootstrap() {
 
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api', app, document);
-
+//https://swp.learnup.work/api
+//http://localhost:3001/api
   await app.listen(3001);
 }
 

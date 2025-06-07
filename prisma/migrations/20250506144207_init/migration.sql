@@ -1,6 +1,6 @@
 -- CreateTable
 CREATE TABLE `User` (
-    `id` INTEGER NOT NULL AUTO_INCREMENT,
+    `id` CHAR(36) NOT NULL,
     `email` VARCHAR(191) NULL,
     `name` VARCHAR(191) NULL,
     `avatar` VARCHAR(191) NULL,
@@ -11,7 +11,7 @@ CREATE TABLE `User` (
     `isActive` BOOLEAN NOT NULL DEFAULT true,
     `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updatedAt` DATETIME(3) NOT NULL,
-    `studentId` INTEGER NULL,
+    `studentId` VARCHAR(191) NULL,
 
     UNIQUE INDEX `User_email_key`(`email`),
     UNIQUE INDEX `User_studentId_key`(`studentId`),
@@ -19,10 +19,21 @@ CREATE TABLE `User` (
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
+CREATE TABLE `Student` (
+    `id` CHAR(36) NOT NULL,
+    `fullName` VARCHAR(191) NOT NULL,
+    `email` VARCHAR(191) NOT NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+
+    UNIQUE INDEX `Student_email_key`(`email`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
 CREATE TABLE `RefreshToken` (
-    `id` INTEGER NOT NULL AUTO_INCREMENT,
-    `token` VARCHAR(191) NOT NULL,
-    `userId` INTEGER NOT NULL,
+    `id` CHAR(36) NOT NULL,
+    `token` VARCHAR(512) NOT NULL,
+    `userId` VARCHAR(191) NOT NULL,
     `expiresAt` DATETIME(3) NOT NULL,
     `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
 

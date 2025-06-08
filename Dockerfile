@@ -1,19 +1,25 @@
-FROM node:20-alpine3.20
+FROM node:20-alpine
 
 WORKDIR /app
 
-COPY package.json /app
-COPY pnpm-lock.yaml /app
+# Copy file cấu hình trước
+COPY package.json pnpm-lock.yaml ./
 
-RUN npm install -g pnpm
+# Cài pnpm và dependencies
+RUN npm install -g pnpm && pnpm install
 
-RUN pnpm install
+# Copy toàn bộ source sau khi đã install xong
+COPY . .
 
-COPY . /app
-
-RUN npx prisma generate
-
-
+# Build NestJS app
 RUN pnpm run build
 
+# Kiểm tra dist tồn tại (debug)
+RUN ls -la dist
+
+# Thiết lập PORT và expose
+ENV PORT=3001
+EXPOSE 3001
+
+# Khởi chạy ứng dụng
 CMD ["pnpm", "run", "start:prod"]

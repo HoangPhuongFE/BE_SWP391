@@ -1,5 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
   provider = "prisma-client-js"
@@ -7,40 +5,97 @@ generator client {
 
 datasource db {
   provider = "mysql"
- url      = env("DATABASE_URL")
- }
-
-// Role: Quản lý vai trò người dùng (Guest, Customer, Consultant, v.v.)
-model Role {
-  role_id     String   @id @default(uuid()) @db.Char(36)
-  name        String   @unique @db.VarChar(50)
-  description String?
-  created_at  DateTime @default(now())
-  updated_at  DateTime @updatedAt
-  users       User[]   // Quan hệ 1-nhiều với User
-  permissions RolePermission[] // Quan hệ 1-nhiều với RolePermission
+  url      = env("DATABASE_URL")
 }
 
-// Permission: Quản lý quyền (view_homepage, manage_users, v.v.)
-model Permission {
-  permission_id String   @id @default(uuid()) @db.Char(36)
-  name          String   @unique @db.VarChar(100)
-  description   String?
-  created_at    DateTime @default(now())
-  updated_at    DateTime @updatedAt
-  roles         RolePermission[] // Quan hệ 1-nhiều với RolePermission
+// Định nghĩa các ENUM
+enum Role {
+  Guest
+  Customer
+  Consultant
+  Staff
+  Manager
+  Admin
 }
 
-// RolePermission: Liên kết vai trò và quyền (RBAC)
-model RolePermission {
-  role_id       String   @db.Char(36)
-  permission_id String   @db.Char(36)
-  role          Role     @relation(fields: [role_id], references: [role_id])
-  permission    Permission @relation(fields: [permission_id], references: [permission_id])
-  created_at    DateTime @default(now())
+enum Gender {
+  Male
+  Female
+  Other
+}
 
-  @@id([role_id, permission_id])
-  @@index([role_id, permission_id])
+enum AppointmentType {
+  Consultation
+  Testing
+}
+
+enum AppointmentStatus {
+  Pending
+  Confirmed
+  Completed
+  Cancelled
+}
+
+enum PaymentStatus {
+  Pending
+  Paid
+  Failed
+}
+
+enum TestResultStatus {
+  Pending
+  Processing
+  Completed
+}
+
+enum QuestionStatus {
+  Pending
+  Answered
+  Rejected
+}
+
+enum FeedbackStatus {
+  Pending
+  Approved
+  Rejected
+}
+
+enum BlogCommentStatus {
+  Pending
+  Approved
+  Rejected
+}
+
+enum NotificationType {
+  Email
+  Push
+  SMS
+}
+
+enum NotificationStatus {
+  Pending
+  Sent
+  Failed
+}
+
+enum ReportType {
+  Appointment
+  Testing
+  Revenue
+  Consultant
+}
+
+enum PaymentMethod {
+  BankCard
+  MobileApp
+  Cash
+}
+
+enum PaymentTransactionStatus {
+  Pending
+  Completed
+  Failed
+  Refunded
 }
 
 // User: Quản lý tài khoản người dùng
@@ -48,8 +103,7 @@ model User {
   user_id        String            @id @default(uuid()) @db.Char(36)
   email          String            @unique @db.VarChar(255)
   password_hash  String            @db.VarChar(255)
-  role_id        String            @db.Char(36)
-  role           Role              @relation(fields: [role_id], references: [role_id])
+  role           Role              @default(Customer)
   full_name      String?           @db.VarChar(100)
   phone_number   String?           @db.VarChar(20)
   address        String?
@@ -73,7 +127,6 @@ model User {
   menstrual_cycles MenstrualCycle[] // Quan hệ ngược với MenstrualCycle
 
   @@index([email])
-  @@index([role_id])
 }
 
 // Token: Quản lý refresh token cho xác thực
@@ -81,7 +134,7 @@ model Token {
   token_id          String   @id @default(uuid()) @db.Char(36)
   user_id           String   @db.Char(36)
   user              User     @relation(fields: [user_id], references: [user_id])
-  refresh_token_hash String   @db.VarChar(255)
+  refresh_token_hash String   @db.Text
   expires_at        DateTime
   is_revoked        Boolean  @default(false)
   created_at        DateTime @default(now())
@@ -97,7 +150,7 @@ model CustomerProfile {
   user_id          String   @unique @db.Char(36)
   user             User     @relation(fields: [user_id], references: [user_id])
   date_of_birth    DateTime?
-  gender           String?  @db.VarChar(10) // Enum: Male, Female, Other
+  gender           Gender?  // Sử dụng ENUM
   medical_history  String?
   privacy_settings Json?
   created_at       DateTime @default(now())
@@ -163,23 +216,23 @@ model Service {
 
 // Appointment: Quản lý lịch hẹn (tư vấn, xét nghiệm)
 model Appointment {
-  appointment_id    String        @id @default(uuid()) @db.Char(36)
-  user_id           String        @db.Char(36)
-  user              User          @relation(fields: [user_id], references: [user_id])
-  consultant_id     String?       @db.Char(36)
+  appointment_id    String            @id @default(uuid()) @db.Char(36)
+  user_id           String            @db.Char(36)
+  user              User              @relation(fields: [user_id], references: [user_id])
+  consultant_id     String?           @db.Char(36)
   consultant        ConsultantProfile? @relation(fields: [consultant_id], references: [consultant_id])
-  type              String        @db.VarChar(20) // Enum: Consultation, Testing
+  type              AppointmentType   // Sử dụng ENUM
   start_time        DateTime
   end_time          DateTime
-  status            String        @default("Pending") @db.VarChar(20) // Enum: Pending, Confirmed, Completed, Cancelled
-  location          String?       @db.VarChar(255)
-  payment_status    String        @default("Pending") @db.VarChar(20) // Enum: Pending, Paid, Failed
+  status            AppointmentStatus @default(Pending) // Sử dụng ENUM
+  location          String?           @db.VarChar(255)
+  payment_status    PaymentStatus     @default(Pending) // Sử dụng ENUM
   consultation_notes String?
-  created_at        DateTime      @default(now())
-  updated_at        DateTime      @updatedAt
+  created_at        DateTime          @default(now())
+  updated_at        DateTime          @updatedAt
   deleted_at        DateTime?
-  test_result       TestResult?   // Quan hệ 1-1 với TestResult
-  payments          Payment[]     // Quan hệ 1-nhiều với Payment
+  test_result       TestResult?       // Quan hệ 1-1 với TestResult
+  payments          Payment[]         // Quan hệ 1-nhiều với Payment
 
   @@index([user_id, start_time])
   @@index([consultant_id, start_time])
@@ -188,16 +241,16 @@ model Appointment {
 
 // TestResult: Kết quả xét nghiệm STIs
 model TestResult {
-  result_id     String    @id @default(uuid()) @db.Char(36)
-  appointment_id String    @unique @db.Char(36)
-  appointment   Appointment @relation(fields: [appointment_id], references: [appointment_id])
-  service_id    String    @db.Char(36)
-  service       Service   @relation(fields: [service_id], references: [service_id])
+  result_id     String            @id @default(uuid()) @db.Char(36)
+  appointment_id String            @unique @db.Char(36)
+  appointment   Appointment       @relation(fields: [appointment_id], references: [appointment_id])
+  service_id    String            @db.Char(36)
+  service       Service           @relation(fields: [service_id], references: [service_id])
   result_data   String
-  status        String    @default("Pending") @db.VarChar(20) // Enum: Pending, Processing, Completed
+  status        TestResultStatus  @default(Pending) // Sử dụng ENUM
   notes         String?
-  created_at    DateTime  @default(now())
-  updated_at    DateTime  @updatedAt
+  created_at    DateTime          @default(now())
+  updated_at    DateTime          @updatedAt
   deleted_at    DateTime?
 
   @@index([status])
@@ -205,20 +258,20 @@ model TestResult {
 
 // Question: Quản lý hỏi đáp
 model Question {
-  question_id   String    @id @default(uuid()) @db.Char(36)
-  user_id       String    @db.Char(36)
-  user          User      @relation(fields: [user_id], references: [user_id])
-  consultant_id String?   @db.Char(36)
+  question_id   String            @id @default(uuid()) @db.Char(36)
+  user_id       String            @db.Char(36)
+  user          User              @relation(fields: [user_id], references: [user_id])
+  consultant_id String?           @db.Char(36)
   consultant    ConsultantProfile? @relation(fields: [consultant_id], references: [consultant_id])
-  title         String    @db.VarChar(255)
+  title         String            @db.VarChar(255)
   content       String
-  is_public     Boolean   @default(false)
-  is_anonymous  Boolean   @default(false)
-  status        String    @default("Pending") @db.VarChar(20) // Enum: Pending, Answered, Rejected
+  is_public     Boolean           @default(false)
+  is_anonymous  Boolean           @default(false)
+  status        QuestionStatus    @default(Pending) // Sử dụng ENUM
   answer        String?
-  category      String?   @db.VarChar(50)
-  created_at    DateTime  @default(now())
-  updated_at    DateTime  @updatedAt
+  category      String?           @db.VarChar(50)
+  created_at    DateTime          @default(now())
+  updated_at    DateTime          @updatedAt
   deleted_at    DateTime?
 
   @@index([user_id, status])
@@ -227,21 +280,21 @@ model Question {
 
 // Feedback: Quản lý đánh giá và phản hồi
 model Feedback {
-  feedback_id   String    @id @default(uuid()) @db.Char(36)
-  user_id       String    @db.Char(36)
-  user          User      @relation(fields: [user_id], references: [user_id])
-  consultant_id String?   @db.Char(36)
+  feedback_id   String            @id @default(uuid()) @db.Char(36)
+  user_id       String            @db.Char(36)
+  user          User              @relation(fields: [user_id], references: [user_id])
+  consultant_id String?           @db.Char(36)
   consultant    ConsultantProfile? @relation(fields: [consultant_id], references: [consultant_id])
-  service_id    String?   @db.Char(36)
-  service       Service?  @relation(fields: [service_id], references: [service_id])
+  service_id    String?           @db.Char(36)
+  service       Service?          @relation(fields: [service_id], references: [service_id])
   rating        Int
   comment       String?
-  is_public     Boolean   @default(false)
-  is_anonymous  Boolean   @default(false)
-  status        String    @default("Pending") @db.VarChar(20) // Enum: Pending, Approved, Rejected
+  is_public     Boolean           @default(false)
+  is_anonymous  Boolean           @default(false)
+  status        FeedbackStatus    @default(Pending) // Sử dụng ENUM
   response      String?
-  created_at    DateTime  @default(now())
-  updated_at    DateTime  @updatedAt
+  created_at    DateTime          @default(now())
+  updated_at    DateTime          @updatedAt
   deleted_at    DateTime?
 
   @@index([user_id, status])
@@ -270,15 +323,15 @@ model BlogPost {
 
 // BlogComment: Quản lý bình luận bài viết blog
 model BlogComment {
-  comment_id String   @id @default(uuid()) @db.Char(36)
-  post_id    String   @db.Char(36)
-  post       BlogPost @relation(fields: [post_id], references: [post_id])
-  user_id    String   @db.Char(36)
-  user       User     @relation(fields: [user_id], references: [user_id])
+  comment_id String            @id @default(uuid()) @db.Char(36)
+  post_id    String            @db.Char(36)
+  post       BlogPost          @relation(fields: [post_id], references: [post_id])
+  user_id    String            @db.Char(36)
+  user       User              @relation(fields: [user_id], references: [user_id])
   content    String
-  status     String   @default("Pending") @db.VarChar(20) // Enum: Pending, Approved, Rejected
-  created_at DateTime @default(now())
-  updated_at DateTime @updatedAt
+  status     BlogCommentStatus @default(Pending) // Sử dụng ENUM
+  created_at DateTime          @default(now())
+  updated_at DateTime          @updatedAt
   deleted_at DateTime?
 
   @@index([post_id, status])
@@ -286,15 +339,15 @@ model BlogComment {
 
 // Notification: Quản lý thông báo
 model Notification {
-  notification_id String   @id @default(uuid()) @db.Char(36)
-  user_id         String   @db.Char(36)
-  user            User     @relation(fields: [user_id], references: [user_id])
-  type            String   @db.VarChar(20) // Enum: Email, Push, SMS
-  title           String   @db.VarChar(255)
+  notification_id String             @id @default(uuid()) @db.Char(36)
+  user_id         String             @db.Char(36)
+  user            User               @relation(fields: [user_id], references: [user_id])
+  type            NotificationType   // Sử dụng ENUM
+  title           String             @db.VarChar(255)
   content         String
-  status          String   @default("Pending") @db.VarChar(20) // Enum: Pending, Sent, Failed
-  created_at      DateTime @default(now())
-  updated_at      DateTime @updatedAt
+  status          NotificationStatus @default(Pending) // Sử dụng ENUM
+  created_at      DateTime           @default(now())
+  updated_at      DateTime           @updatedAt
   deleted_at      DateTime?
 
   @@index([user_id, status])
@@ -302,15 +355,15 @@ model Notification {
 
 // Report: Quản lý báo cáo
 model Report {
-  report_id  String   @id @default(uuid()) @db.Char(36)
-  type       String   @db.VarChar(20) // Enum: Appointment, Testing, Revenue, Consultant
+  report_id  String       @id @default(uuid()) @db.Char(36)
+  type       ReportType   // Sử dụng ENUM
   data       Json
   start_date DateTime
   end_date   DateTime
-  created_by String   @db.Char(36)
-  creator    User     @relation(fields: [created_by], references: [user_id])
-  created_at DateTime @default(now())
-  updated_at DateTime @updatedAt
+  created_by String       @db.Char(36)
+  creator    User         @relation(fields: [created_by], references: [user_id])
+  created_at DateTime     @default(now())
+  updated_at DateTime     @updatedAt
   deleted_at DateTime?
 
   @@index([type, start_date])
@@ -330,18 +383,18 @@ model AuditLog {
 
 // Payment: Quản lý lịch sử thanh toán và hoàn trả
 model Payment {
-  payment_id     String   @id @default(uuid()) @db.Char(36)
-  appointment_id String   @db.Char(36)
-  appointment    Appointment @relation(fields: [appointment_id], references: [appointment_id])
-  user_id        String   @db.Char(36)
-  user           User     @relation(fields: [user_id], references: [user_id])
-  amount         Decimal  @db.Decimal(10, 2)
-  payment_method String   @db.VarChar(20) // Enum: BankCard, MobileApp, Cash
-  status         String   @default("Pending") @db.VarChar(20) // Enum: Pending, Completed, Failed, Refunded
-  refund_amount  Decimal? @db.Decimal(10, 2)
+  payment_id     String                  @id @default(uuid()) @db.Char(36)
+  appointment_id String                  @db.Char(36)
+  appointment    Appointment             @relation(fields: [appointment_id], references: [appointment_id])
+  user_id        String                  @db.Char(36)
+  user           User                    @relation(fields: [user_id], references: [user_id])
+  amount         Decimal                 @db.Decimal(10, 2)
+  payment_method PaymentMethod           // Sử dụng ENUM
+  status         PaymentTransactionStatus @default(Pending) // Sử dụng ENUM
+  refund_amount  Decimal?                @db.Decimal(10, 2)
   refund_reason  String?
-  created_at     DateTime @default(now())
-  updated_at     DateTime @updatedAt
+  created_at     DateTime                @default(now())
+  updated_at     DateTime                @updatedAt
 
   @@index([appointment_id, status])
   @@index([user_id, status])

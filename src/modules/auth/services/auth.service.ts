@@ -19,54 +19,65 @@ export class AuthService {
     },
     provider: string,
   ) {
-    const { providerId, email, name, picture } = userData;
+    const { email, name } = userData;
 
-    let user = await this.prisma.user.findFirst({
-      where: {
-        provider,
-        providerId,
-      },
-    });
-
-    // Nếu không có → fallback tìm theo email (nếu có)
-    if (!user && email) {
-      user = await this.prisma.user.findUnique({ where: { email } });
+    // Kiểm tra email có tồn tại không
+    if (!email) {
+      throw new Error('Email is required for Google login');
     }
 
-    // Nếu vẫn không có thì tạo mới
+    // Tìm vai trò Customer
+    const customerRole = await this.prisma.role.findFirst({
+      where: { name: 'Customer' },
+    });
+
+    if (!customerRole) {
+      throw new Error('Customer role not found');
+    }
+
+    // Tìm người dùng theo email
+    let user = await this.prisma.user.findUnique({
+      where: { email },
+    });
+
+    // Nếu không có, tạo người dùng mới với vai trò Customer
     if (!user) {
       user = await this.prisma.user.create({
         data: {
           email,
-          name,
-          avatar: picture,
-          provider,
-          providerId,
-          role: 'student',
+          full_name: name,
+          role_id: customerRole.role_id,
+          password_hash: '', // Để trống vì đăng nhập Google không cần mật khẩu
+          is_verified: true, // Đánh dấu là đã xác thực
+          is_active: true,
         },
       });
     }
 
+    // Tạo payload cho JWT
     const payload = {
-      sub: user.id,
+      sub: user.user_id,
       email: user.email,
-      role: user.role,
+      role: customerRole.name, // Sử dụng tên vai trò Customer
     };
 
+    // Tạo access token
     const accessToken = this.jwtService.sign(payload, {
       expiresIn: '1h',
     });
 
+    // Tạo refresh token
     const refreshToken = this.jwtService.sign(payload, {
       expiresIn: '7d',
     });
 
-    // Lưu refresh token vào DB
-    await this.prisma.refreshToken.create({
+    // Lưu refresh token vào bảng Token
+    await this.prisma.token.create({
       data: {
-        token: refreshToken,
-        userId: user.id,
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 ngày
+        user_id: user.user_id,
+        refresh_token_hash: refreshToken, // Lưu token trực tiếp (hoặc hash nếu cần bảo mật)
+        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 ngày
+        is_revoked: false,
       },
     });
 

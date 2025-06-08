@@ -1,108 +1,28 @@
-/*
-  Warnings:
-
-  - The primary key for the `user` table will be changed. If it partially fails, the table could be left without primary key constraint.
-  - You are about to drop the column `avatar` on the `user` table. All the data in the column will be lost.
-  - You are about to drop the column `createdAt` on the `user` table. All the data in the column will be lost.
-  - You are about to drop the column `id` on the `user` table. All the data in the column will be lost.
-  - You are about to drop the column `isActive` on the `user` table. All the data in the column will be lost.
-  - You are about to drop the column `name` on the `user` table. All the data in the column will be lost.
-  - You are about to drop the column `password` on the `user` table. All the data in the column will be lost.
-  - You are about to drop the column `provider` on the `user` table. All the data in the column will be lost.
-  - You are about to drop the column `providerId` on the `user` table. All the data in the column will be lost.
-  - You are about to drop the column `role` on the `user` table. All the data in the column will be lost.
-  - You are about to drop the column `studentId` on the `user` table. All the data in the column will be lost.
-  - You are about to drop the column `updatedAt` on the `user` table. All the data in the column will be lost.
-  - You are about to drop the `refreshtoken` table. If the table is not empty, all the data it contains will be lost.
-  - You are about to drop the `student` table. If the table is not empty, all the data it contains will be lost.
-  - Added the required column `password_hash` to the `User` table without a default value. This is not possible if the table is not empty.
-  - Added the required column `role_id` to the `User` table without a default value. This is not possible if the table is not empty.
-  - Added the required column `updated_at` to the `User` table without a default value. This is not possible if the table is not empty.
-  - The required column `user_id` was added to the `User` table with a prisma-level default value. This is not possible if the table is not empty. Please add this column as optional, then populate it before making it required.
-  - Made the column `email` on table `user` required. This step will fail if there are existing NULL values in that column.
-
-*/
--- DropForeignKey
-ALTER TABLE `refreshtoken` DROP FOREIGN KEY `RefreshToken_userId_fkey`;
-
--- DropForeignKey
-ALTER TABLE `user` DROP FOREIGN KEY `User_studentId_fkey`;
-
--- DropIndex
-DROP INDEX `User_studentId_key` ON `user`;
-
--- AlterTable
-ALTER TABLE `user` DROP PRIMARY KEY,
-    DROP COLUMN `avatar`,
-    DROP COLUMN `createdAt`,
-    DROP COLUMN `id`,
-    DROP COLUMN `isActive`,
-    DROP COLUMN `name`,
-    DROP COLUMN `password`,
-    DROP COLUMN `provider`,
-    DROP COLUMN `providerId`,
-    DROP COLUMN `role`,
-    DROP COLUMN `studentId`,
-    DROP COLUMN `updatedAt`,
-    ADD COLUMN `address` VARCHAR(191) NULL,
-    ADD COLUMN `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-    ADD COLUMN `deleted_at` DATETIME(3) NULL,
-    ADD COLUMN `full_name` VARCHAR(100) NULL,
-    ADD COLUMN `is_active` BOOLEAN NOT NULL DEFAULT true,
-    ADD COLUMN `is_verified` BOOLEAN NOT NULL DEFAULT false,
-    ADD COLUMN `password_hash` VARCHAR(255) NOT NULL,
-    ADD COLUMN `phone_number` VARCHAR(20) NULL,
-    ADD COLUMN `role_id` CHAR(36) NOT NULL,
-    ADD COLUMN `updated_at` DATETIME(3) NOT NULL,
-    ADD COLUMN `user_id` CHAR(36) NOT NULL,
-    MODIFY `email` VARCHAR(255) NOT NULL,
-    ADD PRIMARY KEY (`user_id`);
-
--- DropTable
-DROP TABLE `refreshtoken`;
-
--- DropTable
-DROP TABLE `student`;
-
 -- CreateTable
-CREATE TABLE `Role` (
-    `role_id` CHAR(36) NOT NULL,
-    `name` VARCHAR(50) NOT NULL,
-    `description` VARCHAR(191) NULL,
+CREATE TABLE `User` (
+    `user_id` CHAR(36) NOT NULL,
+    `email` VARCHAR(255) NOT NULL,
+    `password_hash` VARCHAR(255) NOT NULL,
+    `role` ENUM('Guest', 'Customer', 'Consultant', 'Staff', 'Manager', 'Admin') NOT NULL DEFAULT 'Customer',
+    `full_name` VARCHAR(100) NULL,
+    `phone_number` VARCHAR(20) NULL,
+    `address` VARCHAR(191) NULL,
+    `is_verified` BOOLEAN NOT NULL DEFAULT false,
+    `is_active` BOOLEAN NOT NULL DEFAULT true,
     `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updated_at` DATETIME(3) NOT NULL,
+    `deleted_at` DATETIME(3) NULL,
 
-    UNIQUE INDEX `Role_name_key`(`name`),
-    PRIMARY KEY (`role_id`)
-) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-
--- CreateTable
-CREATE TABLE `Permission` (
-    `permission_id` CHAR(36) NOT NULL,
-    `name` VARCHAR(100) NOT NULL,
-    `description` VARCHAR(191) NULL,
-    `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-    `updated_at` DATETIME(3) NOT NULL,
-
-    UNIQUE INDEX `Permission_name_key`(`name`),
-    PRIMARY KEY (`permission_id`)
-) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-
--- CreateTable
-CREATE TABLE `RolePermission` (
-    `role_id` CHAR(36) NOT NULL,
-    `permission_id` CHAR(36) NOT NULL,
-    `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-
-    INDEX `RolePermission_role_id_permission_id_idx`(`role_id`, `permission_id`),
-    PRIMARY KEY (`role_id`, `permission_id`)
+    UNIQUE INDEX `User_email_key`(`email`),
+    INDEX `User_email_idx`(`email`),
+    PRIMARY KEY (`user_id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
 CREATE TABLE `Token` (
     `token_id` CHAR(36) NOT NULL,
     `user_id` CHAR(36) NOT NULL,
-    `refresh_token_hash` VARCHAR(255) NOT NULL,
+    `refresh_token_hash` TEXT NOT NULL,
     `expires_at` DATETIME(3) NOT NULL,
     `is_revoked` BOOLEAN NOT NULL DEFAULT false,
     `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
@@ -118,7 +38,7 @@ CREATE TABLE `CustomerProfile` (
     `profile_id` CHAR(36) NOT NULL,
     `user_id` CHAR(36) NOT NULL,
     `date_of_birth` DATETIME(3) NULL,
-    `gender` VARCHAR(10) NULL,
+    `gender` ENUM('Male', 'Female', 'Other') NULL,
     `medical_history` VARCHAR(191) NULL,
     `privacy_settings` JSON NULL,
     `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
@@ -187,12 +107,12 @@ CREATE TABLE `Appointment` (
     `appointment_id` CHAR(36) NOT NULL,
     `user_id` CHAR(36) NOT NULL,
     `consultant_id` CHAR(36) NULL,
-    `type` VARCHAR(20) NOT NULL,
+    `type` ENUM('Consultation', 'Testing') NOT NULL,
     `start_time` DATETIME(3) NOT NULL,
     `end_time` DATETIME(3) NOT NULL,
-    `status` VARCHAR(20) NOT NULL DEFAULT 'Pending',
+    `status` ENUM('Pending', 'Confirmed', 'Completed', 'Cancelled') NOT NULL DEFAULT 'Pending',
     `location` VARCHAR(255) NULL,
-    `payment_status` VARCHAR(20) NOT NULL DEFAULT 'Pending',
+    `payment_status` ENUM('Pending', 'Paid', 'Failed') NOT NULL DEFAULT 'Pending',
     `consultation_notes` VARCHAR(191) NULL,
     `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updated_at` DATETIME(3) NOT NULL,
@@ -210,7 +130,7 @@ CREATE TABLE `TestResult` (
     `appointment_id` CHAR(36) NOT NULL,
     `service_id` CHAR(36) NOT NULL,
     `result_data` VARCHAR(191) NOT NULL,
-    `status` VARCHAR(20) NOT NULL DEFAULT 'Pending',
+    `status` ENUM('Pending', 'Processing', 'Completed') NOT NULL DEFAULT 'Pending',
     `notes` VARCHAR(191) NULL,
     `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updated_at` DATETIME(3) NOT NULL,
@@ -230,7 +150,7 @@ CREATE TABLE `Question` (
     `content` VARCHAR(191) NOT NULL,
     `is_public` BOOLEAN NOT NULL DEFAULT false,
     `is_anonymous` BOOLEAN NOT NULL DEFAULT false,
-    `status` VARCHAR(20) NOT NULL DEFAULT 'Pending',
+    `status` ENUM('Pending', 'Answered', 'Rejected') NOT NULL DEFAULT 'Pending',
     `answer` VARCHAR(191) NULL,
     `category` VARCHAR(50) NULL,
     `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
@@ -252,7 +172,7 @@ CREATE TABLE `Feedback` (
     `comment` VARCHAR(191) NULL,
     `is_public` BOOLEAN NOT NULL DEFAULT false,
     `is_anonymous` BOOLEAN NOT NULL DEFAULT false,
-    `status` VARCHAR(20) NOT NULL DEFAULT 'Pending',
+    `status` ENUM('Pending', 'Approved', 'Rejected') NOT NULL DEFAULT 'Pending',
     `response` VARCHAR(191) NULL,
     `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updated_at` DATETIME(3) NOT NULL,
@@ -288,7 +208,7 @@ CREATE TABLE `BlogComment` (
     `post_id` CHAR(36) NOT NULL,
     `user_id` CHAR(36) NOT NULL,
     `content` VARCHAR(191) NOT NULL,
-    `status` VARCHAR(20) NOT NULL DEFAULT 'Pending',
+    `status` ENUM('Pending', 'Approved', 'Rejected') NOT NULL DEFAULT 'Pending',
     `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updated_at` DATETIME(3) NOT NULL,
     `deleted_at` DATETIME(3) NULL,
@@ -301,10 +221,10 @@ CREATE TABLE `BlogComment` (
 CREATE TABLE `Notification` (
     `notification_id` CHAR(36) NOT NULL,
     `user_id` CHAR(36) NOT NULL,
-    `type` VARCHAR(20) NOT NULL,
+    `type` ENUM('Email', 'Push', 'SMS') NOT NULL,
     `title` VARCHAR(255) NOT NULL,
     `content` VARCHAR(191) NOT NULL,
-    `status` VARCHAR(20) NOT NULL DEFAULT 'Pending',
+    `status` ENUM('Pending', 'Sent', 'Failed') NOT NULL DEFAULT 'Pending',
     `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updated_at` DATETIME(3) NOT NULL,
     `deleted_at` DATETIME(3) NULL,
@@ -316,7 +236,7 @@ CREATE TABLE `Notification` (
 -- CreateTable
 CREATE TABLE `Report` (
     `report_id` CHAR(36) NOT NULL,
-    `type` VARCHAR(20) NOT NULL,
+    `type` ENUM('Appointment', 'Testing', 'Revenue', 'Consultant') NOT NULL,
     `data` JSON NOT NULL,
     `start_date` DATETIME(3) NOT NULL,
     `end_date` DATETIME(3) NOT NULL,
@@ -348,8 +268,8 @@ CREATE TABLE `Payment` (
     `appointment_id` CHAR(36) NOT NULL,
     `user_id` CHAR(36) NOT NULL,
     `amount` DECIMAL(10, 2) NOT NULL,
-    `payment_method` VARCHAR(20) NOT NULL,
-    `status` VARCHAR(20) NOT NULL DEFAULT 'Pending',
+    `payment_method` ENUM('BankCard', 'MobileApp', 'Cash') NOT NULL,
+    `status` ENUM('Pending', 'Completed', 'Failed', 'Refunded') NOT NULL DEFAULT 'Pending',
     `refund_amount` DECIMAL(10, 2) NULL,
     `refund_reason` VARCHAR(191) NULL,
     `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
@@ -359,21 +279,6 @@ CREATE TABLE `Payment` (
     INDEX `Payment_user_id_status_idx`(`user_id`, `status`),
     PRIMARY KEY (`payment_id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-
--- CreateIndex
-CREATE INDEX `User_email_idx` ON `User`(`email`);
-
--- CreateIndex
-CREATE INDEX `User_role_id_idx` ON `User`(`role_id`);
-
--- AddForeignKey
-ALTER TABLE `RolePermission` ADD CONSTRAINT `RolePermission_role_id_fkey` FOREIGN KEY (`role_id`) REFERENCES `Role`(`role_id`) ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE `RolePermission` ADD CONSTRAINT `RolePermission_permission_id_fkey` FOREIGN KEY (`permission_id`) REFERENCES `Permission`(`permission_id`) ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE `User` ADD CONSTRAINT `User_role_id_fkey` FOREIGN KEY (`role_id`) REFERENCES `Role`(`role_id`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `Token` ADD CONSTRAINT `Token_user_id_fkey` FOREIGN KEY (`user_id`) REFERENCES `User`(`user_id`) ON DELETE RESTRICT ON UPDATE CASCADE;

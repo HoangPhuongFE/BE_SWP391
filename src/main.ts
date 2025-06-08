@@ -15,12 +15,21 @@ async function bootstrap() {
       forbidNonWhitelisted: false,
     }),
   );
-// Cấu hình Swagger
+ // --- Cấu hình Swagger có Bearer Auth ---
   const config = new DocumentBuilder()
     .setTitle('SWP - Graduation Thesis API')
     .setDescription('API Quản lí chu kỳ kinh nguyệt')
     .setVersion('1.0')
-    .addTag('students')
+    .addBearerAuth(
+      {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'JWT',
+        name: 'Authorization',
+        in: 'header',
+      },
+      'access-token', // tên của security scheme, phải trùng với @ApiBearerAuth
+    )
     .build();
 
   const document = SwaggerModule.createDocument(app, config);

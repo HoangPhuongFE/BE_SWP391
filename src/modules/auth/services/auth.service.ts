@@ -1,6 +1,8 @@
 import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '@/prisma/prisma.service';
+import { UpdateCustomerProfileDto } from '../dtos/update-customer-profile.dto';
+import { UpdateConsultantProfileDto } from '../dtos/update-consultant-profile.dto';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
@@ -8,7 +10,7 @@ export class AuthService {
   constructor(
     private readonly jwtService: JwtService,
     private readonly prisma: PrismaService,
-  ) {}
+  ) { }
 
   // OAuth login handler
   async handleOAuthLogin(userData: {
@@ -97,5 +99,107 @@ export class AuthService {
     });
 
     return { accessToken, refreshToken, user };
+  }
+  async register(email: string, password: string, fullName: string) {
+    // Kiểm tra email đã tồn tại chưa
+    const exists = await this.prisma.user.findUnique({ where: { email } });
+    if (exists) {
+      throw new BadRequestException('Email already in use');
+    }
+
+    // Hash mật khẩu
+    const hash = await bcrypt.hash(password, 10);
+
+    // Tạo user mới
+    const user = await this.prisma.user.create({
+      data: {
+        email,
+        password_hash: hash,
+        full_name: fullName,
+        role: 'Customer',
+        is_verified: false,
+        is_active: true,
+      },
+    });
+
+    // (Optionally) tự login ngay sau signup:
+    // return this.loginLocal(user);
+
+    return user;
+  }
+  async changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<void> {
+    // Lấy user
+    const user = await this.prisma.user.findUnique({ where: { user_id: userId } });
+    if (!user) throw new UnauthorizedException('Người dùng không tồn tại');
+
+    // Kiểm tra mật khẩu hiện tại
+    const match = await bcrypt.compare(currentPassword, user.password_hash);
+    if (!match) throw new UnauthorizedException('Mật khẩu hiện tại không chính xác');
+
+    // Hash mật khẩu mới và cập nhật
+    const hash = await bcrypt.hash(newPassword, 10);
+    await this.prisma.user.update({
+      where: { user_id: userId },
+      data: { password_hash: hash },
+    });
+  }
+  /** Lấy CustomerProfile theo userId */
+  async getCustomerProfile(userId: string) {
+    const profile = await this.prisma.customerProfile.findUnique({
+      where: { user_id: userId },
+    });
+    return profile;
+  }
+  async upsertCustomerProfile(
+    userId: string,
+    dto: UpdateCustomerProfileDto,
+  ) {
+    return this.prisma.customerProfile.upsert({
+      where: { user_id: userId },
+      create: {
+        user_id: userId,
+        date_of_birth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : undefined,
+        gender: dto.gender,
+        medical_history: dto.medicalHistory,
+        privacy_settings: dto.privacySettings ?? undefined,
+      },
+      update: {
+        ...(dto.dateOfBirth !== undefined && { date_of_birth: new Date(dto.dateOfBirth) }),
+        ...(dto.gender !== undefined && { gender: dto.gender }),
+        ...(dto.medicalHistory !== undefined && { medical_history: dto.medicalHistory }),
+        ...(dto.privacySettings !== undefined && { privacy_settings: dto.privacySettings }),
+      },
+    });
+  }
+  /** Lấy ConsultantProfile theo userId */
+  async getConsultantProfile(userId: string) {
+    const profile = await this.prisma.consultantProfile.findUnique({
+      where: { user_id: userId },
+    });
+    return profile;
+  }
+  /** Upsert ConsultantProfile (1-1) */
+  async upsertConsultantProfile(
+    userId: string,
+    dto: UpdateConsultantProfileDto,
+  ) {
+    return this.prisma.consultantProfile.upsert({
+      where: { user_id: userId },
+      create: {
+        user_id: userId,
+        qualifications: dto.qualifications,
+        experience: dto.experience,
+        specialization: dto.specialization,
+      },
+      update: {
+        ...(dto.qualifications !== undefined && { qualifications: dto.qualifications }),
+        ...(dto.experience !== undefined && { experience: dto.experience }),
+        ...(dto.specialization !== undefined && { specialization: dto.specialization }),
+      },
+    });
   }
 }

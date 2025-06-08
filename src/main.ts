@@ -36,6 +36,12 @@ async function bootstrap() {
   SwaggerModule.setup('api', app, document);
 //https://swp.learnup.work/api
 //http://localhost:3001/api
+// --- Cấu hình CORS ---
+  app.enableCors({
+    origin: process.env.FRONTEND_URL_PROD , // hoặc địa chỉ frontend của bạn
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+    credentials: true,
+  });
   await app.listen(3001);
 }
 

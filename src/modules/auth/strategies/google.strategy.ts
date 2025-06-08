@@ -6,15 +6,13 @@ import { Request } from 'express';
 @Injectable()
 export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
   constructor() {
-    const callbackURL =
-      process.env.NODE_ENV === 'production'
-        ? `${process.env.BACKEND_URL_PROD}/auth/google/redirect`
-        : `${process.env.BACKEND_URL_LOCAL}/auth/google/redirect`;
-
     super({
       clientID: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-      callbackURL,
+      callbackURL:
+        process.env.NODE_ENV === 'production'
+          ? `${process.env.BACKEND_URL_PROD}/auth/google/redirect`
+          : `${process.env.BACKEND_URL_LOCAL}/auth/google/redirect`,
       scope: ['email', 'profile'],
       passReqToCallback: true,
     });
@@ -38,3 +36,4 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
     done(null, user);
   }
 }
+

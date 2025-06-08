@@ -1,14 +1,15 @@
-// src/modules/auth/auth.module.ts
 import { Module } from '@nestjs/common';
+import { PassportModule } from '@nestjs/passport';
+import { JwtModule } from '@nestjs/jwt';
 import { AuthService } from './services/auth.service';
 import { AuthController } from './controllers/auth.controller';
-import { JwtModule } from '@nestjs/jwt';
 import { GoogleStrategy } from './strategies/google.strategy';
-
-import { PrismaModule } from '@/prisma/prisma.module'; 
+import { LocalStrategy } from './strategies/local.strategy';
+import { PrismaModule } from '@/prisma/prisma.module';
 
 @Module({
   imports: [
+    PassportModule,
     JwtModule.register({
       secret: process.env.JWT_SECRET,
       signOptions: { expiresIn: '1h' },
@@ -16,6 +17,6 @@ import { PrismaModule } from '@/prisma/prisma.module';
     PrismaModule,
   ],
   controllers: [AuthController],
-  providers: [AuthService, GoogleStrategy],
+  providers: [AuthService, GoogleStrategy, LocalStrategy],
 })
 export class AuthModule {}

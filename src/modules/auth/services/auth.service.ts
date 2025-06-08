@@ -10,81 +10,60 @@ export class AuthService {
   ) {}
 
   async handleOAuthLogin(
-    userData: {
-      providerId: string;
-      provider: string;
-      email?: string;
-      name?: string;
-      picture?: string;
-    },
-    provider: string,
-  ) {
-    const { email, name } = userData;
+  userData: {
+    providerId: string;
+    provider: string;
+    email?: string;
+    name?: string;
+    picture?: string;
+  },
+  provider: string,
+) {
+  const { email, name } = userData;
 
-    // Kiểm tra email có tồn tại không
-    if (!email) {
-      throw new Error('Email is required for Google login');
-    }
+  if (!email) {
+    throw new Error('Email is required for Google login');
+  }
 
-    // Tìm vai trò Customer
-    const customerRole = await this.prisma.role.findFirst({
-      where: { name: 'Customer' },
-    });
+  // Tìm user theo email
+  let user = await this.prisma.user.findUnique({ where: { email } });
 
-    if (!customerRole) {
-      throw new Error('Customer role not found');
-    }
-
-    // Tìm người dùng theo email
-    let user = await this.prisma.user.findUnique({
-      where: { email },
-    });
-
-    // Nếu không có, tạo người dùng mới với vai trò Customer
-    if (!user) {
-      user = await this.prisma.user.create({
-        data: {
-          email,
-          full_name: name,
-          role_id: customerRole.role_id,
-          password_hash: '', // Để trống vì đăng nhập Google không cần mật khẩu
-          is_verified: true, // Đánh dấu là đã xác thực
-          is_active: true,
-        },
-      });
-    }
-
-    // Tạo payload cho JWT
-    const payload = {
-      sub: user.user_id,
-      email: user.email,
-      role: customerRole.name, // Sử dụng tên vai trò Customer
-    };
-
-    // Tạo access token
-    const accessToken = this.jwtService.sign(payload, {
-      expiresIn: '1h',
-    });
-
-    // Tạo refresh token
-    const refreshToken = this.jwtService.sign(payload, {
-      expiresIn: '7d',
-    });
-
-    // Lưu refresh token vào bảng Token
-    await this.prisma.token.create({
+  // Nếu không có, tạo mới với role enum Customer
+  if (!user) {
+    user = await this.prisma.user.create({
       data: {
-        user_id: user.user_id,
-        refresh_token_hash: refreshToken, // Lưu token trực tiếp (hoặc hash nếu cần bảo mật)
-        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 ngày
-        is_revoked: false,
+        email,
+        full_name: name,
+        role: 'Customer', // Gán trực tiếp giá trị enum nếu role là enum
+        password_hash: '',
+        is_verified: true,
+        is_active: true,
       },
     });
-
-    return {
-      accessToken,
-      refreshToken,
-      user,
-    };
   }
+
+  // Tạo payload cho JWT
+  const payload = {
+    sub: user.user_id,
+    email: user.email,
+    role: user.role,          // lấy trực tiếp từ enum
+  };
+
+  // Tạo access & refresh token
+  const accessToken = this.jwtService.sign(payload, { expiresIn: '1h' });
+  const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' });
+
+  // Lưu refresh token
+  await this.prisma.token.create({
+    data: {
+      user_id: user.user_id,
+      refresh_token_hash: refreshToken,
+      expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      is_revoked: false,
+    },
+  });
+
+  return { accessToken, refreshToken, user };
+}
+
 }

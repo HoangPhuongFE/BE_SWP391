@@ -9,8 +9,6 @@ RUN npm install -g pnpm && pnpm install
 # Copy toàn bộ mã nguồn vào container
 COPY . .
 
-# (Nếu dùng .env để generate prisma client)
-COPY .env .   # nếu cần DATABASE_URL trong prisma
 
 # Generate Prisma Client trước khi build
 RUN npx prisma generate

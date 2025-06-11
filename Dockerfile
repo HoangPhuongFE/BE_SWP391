@@ -6,17 +6,20 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml ./
 RUN npm install -g pnpm && pnpm install
 
+# Inject build-time env cho Prisma generate
+ARG DATABASE_URL
+ENV DATABASE_URL=${DATABASE_URL}
 
-# Copy toàn bộ mã nguồn
+# Copy toàn bộ mã nguồn (sau khi env đã có)
 COPY . .
 
-# Generate Prisma Client trước khi build
+# Generate Prisma Client
 RUN npx prisma generate
 
 # Build NestJS
 RUN pnpm run build
 
-# Kiểm tra thư mục dist (debug)
+# Debug dist (tùy chọn)
 RUN ls -la dist
 
 ENV PORT=3001

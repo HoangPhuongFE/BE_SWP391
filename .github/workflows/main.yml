@@ -12,12 +12,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Create .env file
-        run: |
-          echo "${{ secrets.ENV_PROD }}" > .env
-
+      # Build docker image có truyền DATABASE_URL vào build-time
       - name: Build docker image
-        run: docker build --platform linux/amd64 -t hoangleuleu/swp-2025:v0 .
+        run: |
+          docker build --platform linux/amd64 \
+            --build-arg DATABASE_URL=${{ secrets.DATABASE_URL }} \
+            -t hoangleuleu/swp-2025:v0 .
 
       - name: Login to Docker Hub
         uses: docker/login-action@v3
@@ -40,30 +40,22 @@ jobs:
           password: ${{ secrets.PASSWORD_PRODUCTION }}
           port: ${{ secrets.PORT_PRODUCTION }}
           script: |
-            # Tạo thư mục deploy nếu chưa có
             mkdir -p /home/hoang/deploy
 
-            # Tạo file .env trên VPS từ secret ENV_PROD
             echo "${{ secrets.ENV_PROD }}" > /home/hoang/deploy/.env
 
-            # Login Docker Hub
             docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" -p "${{ secrets.DOCKERHUB_TOKEN }}"
 
-            # Pull image mới
             docker pull hoangleuleu/swp-2025:v0
 
-            # Stop & remove container cũ
             docker rm -f dev_nest_graphql || true
 
-            # Chạy container mới, đọc env từ file .env
             docker container run -dp 8080:3001 --name dev_nest_graphql \
               --network graphql_network \
               --env-file /home/hoang/deploy/.env \
               hoangleuleu/swp-2025:v0
 
-            # Đảm bảo network luôn tồn tại
             docker network inspect graphql_network || docker network create graphql_network
             docker network connect graphql_network dev_nest_graphql || true
 
-            # Dọn rác image cũ
             docker image prune -f

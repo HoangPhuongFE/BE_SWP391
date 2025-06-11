@@ -1,49 +1,69 @@
-  name: deploy vps
+name: deploy vps
 
-  on:
-    push:
-      branches:
-        - main
+on:
+  push:
+    branches:
+      - main
 
-  jobs:
-    build:
-      name: build
-      runs-on: ubuntu-latest
-      steps:
-        - uses: actions/checkout@v4
+jobs:
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
 
-        - name: Create .env file
-          run: |
-            echo "${{ secrets.ENV_PROD }}" > .env
+      - name: Create .env file
+        run: |
+          echo "${{ secrets.ENV_PROD }}" > .env
 
-        - name: Build docker images
-          run: docker build --platform linux/amd64 -t hoangleuleu/swp-2025:v0 .
+      - name: Build docker image
+        run: docker build --platform linux/amd64 -t hoangleuleu/swp-2025:v0 .
 
-        - name: Login to Docker Hub
-          uses: docker/login-action@v3
-          with:
-            username: ${{ secrets.DOCKERHUB_USERNAME }}
-            password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-        - name: Push docker images
-          run: docker push hoangleuleu/swp-2025:v0
+      - name: Push docker image
+        run: docker push hoangleuleu/swp-2025:v0
 
-    deploy:
-      runs-on: ubuntu-latest
-      needs: build
-      steps:
-        - name: Executing remote ssh commands using password
-          uses: appleboy/ssh-action@v1.2.0
-          with:
-            host: ${{ secrets.HOST_PRODUCTION }}
-            username: ${{ secrets.USERNAME_PRODUCTION }}
-            password: ${{ secrets.PASSWORD_PRODUCTION }}
-            port: ${{ secrets.PORT_PRODUCTION }}
-            script: |
-              docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" -p "${{ secrets.DOCKERHUB_TOKEN }}"
-              docker pull hoangleuleu/swp-2025:v0
-              docker rm -f dev_nest_graphql || true
-              docker container run -dp 8080:3001 --name dev_nest_graphql hoangleuleu/swp-2025:v0
-              docker network inspect graphql_network || docker network create graphql_network
-              docker network connect graphql_network dev_nest_graphql
-              docker image prune -f
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Executing remote ssh commands using password
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.HOST_PRODUCTION }}
+          username: ${{ secrets.USERNAME_PRODUCTION }}
+          password: ${{ secrets.PASSWORD_PRODUCTION }}
+          port: ${{ secrets.PORT_PRODUCTION }}
+          script: |
+            # Tạo thư mục deploy nếu chưa có
+            mkdir -p /home/hoang/deploy
+
+            # Tạo file .env trên VPS từ secret ENV_PROD
+            echo "${{ secrets.ENV_PROD }}" > /home/hoang/deploy/.env
+
+            # Login Docker Hub
+            docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" -p "${{ secrets.DOCKERHUB_TOKEN }}"
+
+            # Pull image mới
+            docker pull hoangleuleu/swp-2025:v0
+
+            # Stop & remove container cũ
+            docker rm -f dev_nest_graphql || true
+
+            # Chạy container mới, đọc env từ file .env
+            docker container run -dp 8080:3001 --name dev_nest_graphql \
+              --network graphql_network \
+              --env-file /home/hoang/deploy/.env \
+              hoangleuleu/swp-2025:v0
+
+            # Đảm bảo network luôn tồn tại
+            docker network inspect graphql_network || docker network create graphql_network
+            docker network connect graphql_network dev_nest_graphql || true
+
+            # Dọn rác image cũ
+            docker image prune -f

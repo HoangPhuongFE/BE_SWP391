@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
@@ -10,6 +10,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     if (!jwtSecret) {
       throw new Error('JWT_SECRET is not defined in configuration');
     }
+    console.log('JwtStrategy initialized with secret:', jwtSecret);
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
@@ -18,7 +19,17 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
   }
 
   async validate(payload: any) {
-    // payload là nội dung bạn sign khi tạo token: { sub, email, role }
-    return { userId: payload.sub, email: payload.email, role: payload.role };
+    console.log('JwtStrategy - Payload:', payload); // Thêm log
+    if (!payload.sub || !payload.email || !payload.role) {
+      console.log('JwtStrategy - Invalid payload:', payload);
+      throw new UnauthorizedException('Token payload không hợp lệ');
+    }
+    const user = {
+      userId: payload.sub,
+      email: payload.email,
+      role: payload.role,
+    };
+    console.log('JwtStrategy - Returning user:', user); // Thêm log
+    return user;
   }
 }

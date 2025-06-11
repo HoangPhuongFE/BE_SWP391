@@ -1,9 +1,11 @@
 // src/modules/appointments/controllers/appointment.controller.ts
-import { Controller, Post, Get, Patch, Delete, Body, Param, UseGuards, Req } from '@nestjs/common';
+import { Controller, Post, Get, Patch, Delete, Body, Param, Query, UseGuards, Req } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody, ApiQuery } from '@nestjs/swagger';
 import { AppointmentService } from '../services/appointment.service';
-import { CreateAppointmentDto, UpdateAppointmentDto } from '../dtos/create-appointment.dto';
+import { CreateAppointmentDto, UpdateAppointmentDto, CreateStiAppointmentDto  } from '../dtos/create-appointment.dto';
+import { UpdateAppointmentStatusDto } from '../dtos/update-appointment-status.dto';
+import { GetTestResultDto } from '../dtos/get-test-result.dto';
 import { Roles } from '../../auth/decorators/roles.decorator';
 import { Role } from '@prisma/client';
 
@@ -15,12 +17,23 @@ export class AppointmentController {
   @Post()
   @Roles(Role.Customer)
   @UseGuards(AuthGuard('jwt'))
-  @ApiOperation({ summary: 'Tạo lịch hẹn' })
+  @ApiOperation({ summary: 'Tạo lịch hẹn chung' })
   @ApiBearerAuth('access-token')
   @ApiBody({ type: CreateAppointmentDto })
   async createAppointment(@Body() dto: CreateAppointmentDto, @Req() req) {
-    const userId = (req.user as any).userId; // Lấy từ token
+    const userId = (req.user as any).userId;
     return this.appointmentService.createAppointment({ ...dto, userId });
+  }
+
+  @Post('sti')
+  @Roles(Role.Customer)
+  @UseGuards(AuthGuard('jwt'))
+  @ApiOperation({ summary: 'Đặt lịch xét nghiệm STIs' })
+  @ApiBearerAuth('access-token')
+  @ApiBody({ type: CreateStiAppointmentDto })
+  async createStiAppointment(@Body() dto: CreateStiAppointmentDto, @Req() req) {
+    const userId = (req.user as any).userId;
+    return this.appointmentService.createStiAppointment({ ...dto, userId });
   }
 
   @Get()
@@ -37,6 +50,16 @@ export class AppointmentController {
   @ApiBearerAuth('access-token')
   async getAppointmentById(@Param('appointmentId') appointmentId: string) {
     return this.appointmentService.getAppointmentById(appointmentId);
+  }
+
+  @Patch(':appointmentId/status')
+  @Roles(Role.Staff, Role.Manager, Role.Admin)
+  @UseGuards(AuthGuard('jwt'))
+  @ApiOperation({ summary: 'Cập nhật trạng thái xét nghiệm' })
+  @ApiBearerAuth('access-token')
+  @ApiBody({ type: UpdateAppointmentStatusDto })
+  async updateAppointmentStatus(@Param('appointmentId') appointmentId: string, @Body() dto: UpdateAppointmentStatusDto) {
+    return this.appointmentService.updateAppointmentStatus(appointmentId, dto);
   }
 
   @Patch(':appointmentId')
@@ -56,5 +79,16 @@ export class AppointmentController {
   @ApiBearerAuth('access-token')
   async deleteAppointment(@Param('appointmentId') appointmentId: string) {
     return this.appointmentService.deleteAppointment(appointmentId);
+  }
+
+  @Get('/test-results/:resultId')
+  @Roles(Role.Customer)
+  @UseGuards(AuthGuard('jwt'))
+  @ApiOperation({ summary: 'Nhận kết quả xét nghiệm' })
+  @ApiBearerAuth('access-token')
+  @ApiQuery({ name: 'appointmentId', required: true })
+  async getTestResult(@Param('resultId') resultId: string, @Query() dto: GetTestResultDto, @Req() req) {
+    const userId = (req.user as any).userId;
+    return this.appointmentService.getTestResult(resultId, dto, userId);
   }
 }

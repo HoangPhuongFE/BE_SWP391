@@ -398,12 +398,14 @@ model Payment {
   status         PaymentTransactionStatus @default(Pending) // Sử dụng ENUM
   refund_amount  Decimal?                @db.Decimal(10, 2)
   refund_reason  String?
+  order_code     Int                     @unique  // Thêm orderCode
   created_at     DateTime                @default(now())
   updated_at     DateTime                @updatedAt
 
   @@index([appointment_id, status])
   @@index([user_id, status])
 }
+
 // Schedule: Quản lý lịch trống của Consultant
 model Schedule {
   schedule_id   String    @id @default(uuid()) @db.Char(36)

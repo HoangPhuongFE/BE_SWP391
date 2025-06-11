@@ -1,5 +1,5 @@
 // src/modules/appointments/dtos/create-appointment.dto.ts
-import { IsString, IsDateString, IsEnum ,IsOptional} from 'class-validator';
+import { IsString, IsDateString, IsEnum, IsOptional } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { AppointmentType, AppointmentStatus, PaymentStatus } from '@prisma/client';
 
@@ -49,4 +49,19 @@ export class UpdateAppointmentDto {
   @IsString()
   @IsOptional()
   consultation_notes?: string;
+}
+
+export class CreateStiAppointmentDto {
+  @ApiProperty({ example: "svc001", description: 'ID dịch vụ xét nghiệm' })
+  @IsString()
+  serviceId: string;
+
+  @ApiProperty({ example: "sch001", description: 'ID lịch trống' })
+  @IsString()
+  scheduleId: string;
+
+  @ApiProperty({ example: "Phòng khám A", description: 'Địa điểm', required: false })
+  @IsString()
+  @IsOptional()
+  location?: string;
 }

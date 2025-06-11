@@ -1,22 +1,15 @@
-// src/modules/auth/auth.module.ts
 import { Module } from '@nestjs/common';
-import { APP_GUARD } from '@nestjs/core';
-
 import { PassportModule } from '@nestjs/passport';
-import { JwtModule }     from '@nestjs/jwt';
-import { ConfigModule,
-         ConfigService } from '@nestjs/config';
-
-import { AuthService      } from './services/auth.service';
-import { AuthController   } from './controllers/auth.controller';
-import { ProfileController} from './controllers/profile.controller';
-
-import { RolesGuard       } from './guards/roles.guard';
-import { JwtStrategy      } from './strategies/jwt.strategy';
-import { LocalStrategy    } from './strategies/local.strategy';
-import { GoogleStrategy   } from './strategies/google.strategy';
-
-import { PrismaModule     } from '@/prisma/prisma.module';
+import { JwtModule } from '@nestjs/jwt';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { AuthService } from './services/auth.service';
+import { AuthController } from './controllers/auth.controller';
+import { ProfileController } from './controllers/profile.controller';
+import { JwtStrategy } from './strategies/jwt.strategy';
+import { LocalStrategy } from './strategies/local.strategy';
+import { GoogleStrategy } from './strategies/google.strategy';
+import { PrismaModule } from '@/prisma/prisma.module';
+import { RolesGuard } from './guards/roles.guard';
 
 @Module({
   imports: [
@@ -24,29 +17,21 @@ import { PrismaModule     } from '@/prisma/prisma.module';
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
       imports: [ConfigModule],
-      inject:  [ConfigService],
+      inject: [ConfigService],
       useFactory: (cfg: ConfigService) => ({
         secret: cfg.get<string>('JWT_SECRET'),
-        signOptions: { expiresIn: '1h' },
+        signOptions: { expiresIn: '2h' }, // Đồng bộ với AuthService
       }),
     }),
     PrismaModule,
   ],
-  controllers: [
-    AuthController,
-    ProfileController,
-    // … thêm các controller khác …
-  ],
+  controllers: [AuthController, ProfileController],
   providers: [
     AuthService,
     GoogleStrategy,
     LocalStrategy,
     JwtStrategy,
-    // Đăng ký RolesGuard toàn cục
-    {
-      provide: APP_GUARD,
-      useClass: RolesGuard,
-    },
+    RolesGuard, // Giữ RolesGuard làm provider, nhưng không dùng toàn cục
   ],
 })
 export class AuthModule {}

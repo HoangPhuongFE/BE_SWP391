@@ -1,42 +1,41 @@
-// src/modules/auth/dtos/update-customer-profile.dto.ts
 import { IsOptional, IsString, IsDateString, IsEnum } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Gender } from '@prisma/client';
 
 export class UpdateCustomerProfileDto {
   @ApiPropertyOptional({
-    type: String,
-    format: 'date',
     example: '1990-05-15',
-    description: 'Ngày sinh',
+    description: 'Ngày sinh của khách hàng (định dạng YYYY-MM-DD)',
+    format: 'date',
   })
   @IsOptional()
   @IsDateString()
   dateOfBirth?: string;
 
   @ApiPropertyOptional({
+    example: Gender.Male,
+    description: 'Giới tính của khách hàng',
     enum: Gender,
-    description: 'Giới tính',
   })
   @IsOptional()
   @IsEnum(Gender)
   gender?: Gender;
 
   @ApiPropertyOptional({
-    type: String,
-    description: 'Tiền sử bệnh án',
+    example: 'Không có bệnh lý nền',
+    description: 'Tiền sử bệnh án của khách hàng',
+    minLength: 0,
   })
   @IsOptional()
   @IsString()
   medicalHistory?: string;
 
   @ApiPropertyOptional({
-    type: 'object',
-    description: 'Cài đặt quyền riêng tư',
     example: { showEmail: false, shareData: true },
+    description: 'Cài đặt quyền riêng tư của khách hàng',
+    type: 'object',
     additionalProperties: true,
   })
   @IsOptional()
   privacySettings?: Record<string, any>;
 }
-

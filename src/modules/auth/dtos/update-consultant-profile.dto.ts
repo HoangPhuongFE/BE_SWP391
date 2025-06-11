@@ -1,28 +1,30 @@
-// src/modules/auth/dtos/update-consultant-profile.dto.ts
-import { IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class UpdateConsultantProfileDto {
   @ApiPropertyOptional({
-    type: String,
-    description: 'Trình độ, chứng chỉ',
+    example: 'Bác sĩ đa khoa, chứng chỉ tâm lý học',
+    description: 'Trình độ học vấn hoặc chứng chỉ của tư vấn viên',
+    minLength: 0,
   })
   @IsOptional()
   @IsString()
   qualifications?: string;
 
   @ApiPropertyOptional({
-    type: String,
-    description: 'Kinh nghiệm làm việc',
+    example: '5 năm làm việc tại bệnh viện X',
+    description: 'Kinh nghiệm làm việc của tư vấn viên',
+    minLength: 0,
   })
   @IsOptional()
   @IsString()
   experience?: string;
 
   @ApiPropertyOptional({
-    type: String,
+    example: 'Tâm lý học lâm sàng',
+    description: 'Chuyên môn chính của tư vấn viên',
     maxLength: 100,
-    description: 'Chuyên môn chính',
+    minLength: 0,
   })
   @IsOptional()
   @IsString()

@@ -10,9 +10,8 @@ export class AuthService {
   constructor(
     private readonly jwtService: JwtService,
     private readonly prisma: PrismaService,
-  ) { }
+  ) {}
 
-  // OAuth login handler
   async handleOAuthLogin(userData: {
     provider: string;
     providerId: string;
@@ -36,7 +35,6 @@ export class AuthService {
         },
       });
     } else {
-      // Update profile if desired, keep existing password_hash
       await this.prisma.user.update({
         where: { user_id: user.user_id },
         data: { full_name: name },
@@ -46,12 +44,10 @@ export class AuthService {
     return this.generateTokens(user);
   }
 
-  // Local login JWT generation
   async loginLocal(user: { user_id: string; email: string; role: string }) {
     return this.generateTokens(user);
   }
 
-  // Validate email/password
   async validateUser(email: string, password: string) {
     const user = await this.prisma.user.findUnique({ where: { email } });
     if (!user || !user.is_active) {
@@ -67,7 +63,6 @@ export class AuthService {
     return user;
   }
 
-  // Set or reset password (only if not set)
   async setPassword(email: string, newPassword: string) {
     const user = await this.prisma.user.findUnique({ where: { email } });
     if (!user) {
@@ -83,11 +78,17 @@ export class AuthService {
     });
   }
 
-  // Internal helper: generate access & refresh tokens, persist refresh
   private async generateTokens(user: any) {
-    const payload = { sub: user.user_id, email: user.email, role: user.role };
-    const accessToken = this.jwtService.sign(payload, { expiresIn: '1h' });
+    const payload = {
+      sub: user.user_id,
+      email: user.email,
+      role: user.role,
+    };
+
+    const accessToken = this.jwtService.sign(payload, { expiresIn: '2h' });
     const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' });
+
+    console.log('Generated accessToken with expiresIn: 2h', accessToken); // Thêm log
 
     await this.prisma.token.create({
       data: {
@@ -100,64 +101,65 @@ export class AuthService {
 
     return { accessToken, refreshToken, user };
   }
+
   async register(email: string, password: string, fullName: string) {
-    // Kiểm tra email đã tồn tại chưa
-    const exists = await this.prisma.user.findUnique({ where: { email } });
-    if (exists) {
-      throw new BadRequestException('Email already in use');
-    }
-
-    // Hash mật khẩu
-    const hash = await bcrypt.hash(password, 10);
-
-    // Tạo user mới
-    const user = await this.prisma.user.create({
-      data: {
-        email,
-        password_hash: hash,
-        full_name: fullName,
-        role: 'Customer',
-        is_verified: false,
-        is_active: true,
-      },
-    });
-
-    // (Optionally) tự login ngay sau signup:
-    // return this.loginLocal(user);
-
-    return user;
+  const exists = await this.prisma.user.findUnique({ where: { email } });
+  if (exists) {
+    throw new BadRequestException('Email already in use');
   }
+
+  const hash = await bcrypt.hash(password, 10);
+
+  const user = await this.prisma.user.create({
+    data: {
+      email,
+      password_hash: hash,
+      full_name: fullName,
+      role: 'Customer',
+      is_verified: false,
+      is_active: true,
+    },
+  });
+
+  // Tạo CustomerProfile mặc định
+  await this.prisma.customerProfile.create({
+    data: {
+      user_id: user.user_id,
+      gender: null,
+      medical_history: '',
+      privacy_settings: 'PRIVATE',
+    },
+  });
+
+  return user;
+}
+
   async changePassword(
     userId: string,
     currentPassword: string,
     newPassword: string,
   ): Promise<void> {
-    // Lấy user
     const user = await this.prisma.user.findUnique({ where: { user_id: userId } });
     if (!user) throw new UnauthorizedException('Người dùng không tồn tại');
 
-    // Kiểm tra mật khẩu hiện tại
     const match = await bcrypt.compare(currentPassword, user.password_hash);
     if (!match) throw new UnauthorizedException('Mật khẩu hiện tại không chính xác');
 
-    // Hash mật khẩu mới và cập nhật
     const hash = await bcrypt.hash(newPassword, 10);
     await this.prisma.user.update({
       where: { user_id: userId },
       data: { password_hash: hash },
     });
   }
-  /** Lấy CustomerProfile theo userId */
+
   async getCustomerProfile(userId: string) {
     const profile = await this.prisma.customerProfile.findUnique({
       where: { user_id: userId },
     });
     return profile;
   }
-  async upsertCustomerProfile(
-    userId: string,
-    dto: UpdateCustomerProfileDto,
-  ) {
+
+  async upsertCustomerProfile(userId: string, dto: UpdateCustomerProfileDto) {
     return this.prisma.customerProfile.upsert({
       where: { user_id: userId },
       create: {
@@ -175,18 +177,15 @@ export class AuthService {
       },
     });
   }
-  /** Lấy ConsultantProfile theo userId */
+
   async getConsultantProfile(userId: string) {
     const profile = await this.prisma.consultantProfile.findUnique({
       where: { user_id: userId },
     });
     return profile;
   }
-  /** Upsert ConsultantProfile (1-1) */
-  async upsertConsultantProfile(
-    userId: string,
-    dto: UpdateConsultantProfileDto,
-  ) {
+
+  async upsertConsultantProfile(userId: string, dto: UpdateConsultantProfileDto) {
     return this.prisma.consultantProfile.upsert({
       where: { user_id: userId },
       create: {

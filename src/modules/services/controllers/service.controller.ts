@@ -61,4 +61,14 @@ export class ServiceController {
   async getServiceById(@Param('serviceId') serviceId: string) {
     return this.serviceService.getServiceById(serviceId);
   }
+
+  @Get(':serviceId/consultants')
+  @Roles(Role.Customer)
+  @UseGuards(AuthGuard('jwt'))
+  @ApiOperation({ summary: 'Xem danh sách Consultant và lịch trống theo dịch vụ' })
+  @ApiBearerAuth('access-token')
+  @ApiQuery({ name: 'date', required: false })
+  async getConsultantsWithSchedules(@Param('serviceId') serviceId: string, @Query('date') date?: string) {
+    return this.serviceService.getConsultantsWithSchedules(serviceId, date);
+  }
 }

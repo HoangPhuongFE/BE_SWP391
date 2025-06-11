@@ -1,4 +1,4 @@
-// src/modules/services/services/service.service.ts
+// src/modules/services/services/service.service.ts (tạo mới hoặc thêm phương thức)
 import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { CreateServiceDto } from '../dtos/create-service.dto';
@@ -43,7 +43,6 @@ export class ServiceService {
       data: dto,
     });
 
-    // Gửi thông báo nếu giá thay đổi
     if (
       dto.price !== undefined &&
       Number(dto.price) !== Number(service.price)
@@ -90,5 +89,35 @@ export class ServiceService {
       throw new BadRequestException('Dịch vụ không tồn tại');
     }
     return { service };
+  }
+
+  async getConsultantsWithSchedules(serviceId: string, date?: string) {
+    const where = date ? { start_time: { gte: new Date(date), lte: new Date(date + 'T23:59:59Z') } } : {};
+    const consultants = await this.prisma.consultantProfile.findMany({
+      where: { is_verified: true, deleted_at: null },
+      include: {
+        user: true,
+        schedules: {
+          where: {
+            service_id: serviceId,
+            is_booked: false,
+            deleted_at: null,
+            ...where,
+          },
+        },
+      },
+    });
+
+    return {
+      consultants: consultants.map((c) => ({
+        consultant_id: c.consultant_id,
+        full_name: c.user?.full_name || 'Unknown',
+        schedules: c.schedules.map((s) => ({
+          schedule_id: s.schedule_id,
+          start_time: s.start_time,
+          end_time: s.end_time,
+        })),
+      })),
+    };
   }
 }

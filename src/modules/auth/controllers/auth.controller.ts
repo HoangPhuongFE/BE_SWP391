@@ -108,7 +108,7 @@ export class AuthController {
 @ApiResponse({ status: 201, description: 'Người dùng đã được tạo thành công' })
 async signup(@Body() dto: SignupDto) {
   const user = await this.authService.register(dto.email, dto.password, dto.fullName);
-  return { message: 'Người dùng đã được đăng ký', userId: user.user_id };
+  return { message: 'Người dùng đăng kí thành công', userId: user.user_id };
 }
 
   @Post('change-password')

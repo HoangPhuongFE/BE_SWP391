@@ -28,6 +28,30 @@ async function main() {
         privacy_settings: {},
       },
     },
+     {
+      email: 'zonduyen25@gmail.com',
+      role: 'Customer',
+      full_name: 'Zon Duyền',
+      phone_number: '0900000001',
+      customerProfile: {
+        date_of_birth: new Date('1995-05-10'),
+        gender: Gender.Male,
+        medical_history: 'No known allergies',
+        privacy_settings: {},
+      },
+    },
+     {
+      email: 'heolylom194@gmail.com',
+      role: 'Customer',
+      full_name: 'Hồ Ly Lâm',
+      phone_number: '0900000001',
+      customerProfile: {
+        date_of_birth: new Date('1995-05-10'),
+        gender: Gender.Male,
+        medical_history: 'No known allergies',
+        privacy_settings: {},
+      },
+    },
     {
       email: 'consultant@gmail.com',
       role: 'Consultant',

@@ -4,11 +4,13 @@ import { ConfigModule } from '@nestjs/config';
 import { DatabaseModule } from './database/database.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { CycleModule } from './modules/cycles/cycle.module';
+import { ServiceModule } from './modules/services/service.module';
+import { ScheduleModule } from './modules/schedules/schedule.module';
+import { AppointmentModule } from './modules/appointments/appointment.module';
+import { PaymentModule } from './modules/payment/payment.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { EmailModule } from './modules/email/email.module';
-import { ServiceModule } from './modules/services/service.module';
-import { AppointmentModule } from './modules/appointments/appointment.module';
-import { ScheduleModule } from './modules/schedules/schedule.module';
+
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
@@ -17,9 +19,10 @@ import { ScheduleModule } from './modules/schedules/schedule.module';
     PrismaModule,
     CycleModule,
     ServiceModule,
-    EmailModule,
-    AppointmentModule,
     ScheduleModule,
+    AppointmentModule,
+    PaymentModule,
+    EmailModule,
   ],
 })
 export class AppModule {}

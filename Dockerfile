@@ -6,8 +6,6 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml ./
 RUN npm install -g pnpm && pnpm install
 
-# Copy file env trước khi generate prisma
-COPY .env .env
 
 # Copy toàn bộ mã nguồn
 COPY . .

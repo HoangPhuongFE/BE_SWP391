@@ -34,8 +34,8 @@ async function bootstrap() {
 
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api', app, document);
-//https://swp.learnup.work/api
-//https://swp.learnup.work/api/auth/google
+//https://learnup.work/api
+//https://learnup.work/api/auth/google
 //http://localhost:3001/api
 //http://localhost:3001/api/auth/google
 // --- Cấu hình CORS ---

@@ -28,17 +28,19 @@ async function bootstrap() {
         name: 'Authorization',
         in: 'header',
       },
-      'access-token', // tên của security scheme, phải trùng với @ApiBearerAuth
+      'access-token', 
     )
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api', app, document);
 //https://swp.learnup.work/api
+//https://swp.learnup.work/api/auth/google
 //http://localhost:3001/api
+//http://localhost:3001/api/auth/google
 // --- Cấu hình CORS ---
   app.enableCors({
-    origin: process.env.FRONTEND_URL_PROD , // hoặc địa chỉ frontend của bạn
+    origin: process.env.FRONTEND_URL_PROD , 
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     credentials: true,
   });

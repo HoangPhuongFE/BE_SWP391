@@ -1,2 +1,8 @@
 node_modules
 .env.*
+dist
+.env
+Dockerfile
+.git
+.github
+prisma/dev.db

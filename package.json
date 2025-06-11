@@ -29,11 +29,13 @@
     "@nestjs/mapped-types": "^2.1.0",
     "@nestjs/passport": "^11.0.5",
     "@nestjs/platform-express": "^11.0.1",
+    "@nestjs/schedule": "^6.0.0",
     "@nestjs/swagger": "^11.1.3",
-    "@prisma/client": "^6.6.0",
+    "@prisma/client": "^6.9.0",
     "bcrypt": "^6.0.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
+    "nodemailer": "^7.0.3",
     "passport": "^0.7.0",
     "passport-facebook": "^3.0.0",
     "passport-google-oauth20": "^2.0.0",
@@ -101,6 +103,9 @@
       "@nestjs/swagger": "11.1.3",
       "reflect-metadata": "0.2.2",
       "rxjs": "7.8.1"
-    }
+    },
+    "onlyBuiltDependencies": [
+      "bcrypt"
+    ]
   }
 }

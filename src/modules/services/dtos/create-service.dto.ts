@@ -1,0 +1,27 @@
+// src/modules/services/dtos/create-service.dto.ts
+import { IsString, IsDecimal, Min, IsBoolean, IsOptional } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
+
+export class CreateServiceDto {
+  @ApiProperty({ example: 'Gói toàn diện', description: 'Tên dịch vụ' })
+  @IsString()
+  name: string;
+
+  @ApiProperty({ example: 1500000, description: 'Giá dịch vụ' })
+  @IsDecimal()
+  @Min(0)
+  price: number;
+
+  @ApiProperty({ example: 'HIV, HPV, Chlamydia', description: 'Mô tả dịch vụ', required: false })
+  @IsString()
+  @IsOptional()
+  description?: string;
+
+  @ApiProperty({ example: 'STI', description: 'Danh mục dịch vụ' })
+  @IsString()
+  category: string;
+
+  @ApiProperty({ example: true, description: 'Trạng thái hoạt động' })
+  @IsBoolean()
+  is_active: boolean;
+}

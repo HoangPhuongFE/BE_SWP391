@@ -280,6 +280,22 @@ CREATE TABLE `Payment` (
     PRIMARY KEY (`payment_id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
+-- CreateTable
+CREATE TABLE `Schedule` (
+    `schedule_id` CHAR(36) NOT NULL,
+    `consultant_id` CHAR(36) NOT NULL,
+    `service_id` CHAR(36) NOT NULL,
+    `start_time` DATETIME(3) NOT NULL,
+    `end_time` DATETIME(3) NOT NULL,
+    `is_booked` BOOLEAN NOT NULL DEFAULT false,
+    `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `deleted_at` DATETIME(3) NULL,
+
+    INDEX `Schedule_consultant_id_start_time_idx`(`consultant_id`, `start_time`),
+    INDEX `Schedule_service_id_idx`(`service_id`),
+    PRIMARY KEY (`schedule_id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
 -- AddForeignKey
 ALTER TABLE `Token` ADD CONSTRAINT `Token_user_id_fkey` FOREIGN KEY (`user_id`) REFERENCES `User`(`user_id`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
@@ -342,3 +358,9 @@ ALTER TABLE `Payment` ADD CONSTRAINT `Payment_appointment_id_fkey` FOREIGN KEY (
 
 -- AddForeignKey
 ALTER TABLE `Payment` ADD CONSTRAINT `Payment_user_id_fkey` FOREIGN KEY (`user_id`) REFERENCES `User`(`user_id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `Schedule` ADD CONSTRAINT `Schedule_consultant_id_fkey` FOREIGN KEY (`consultant_id`) REFERENCES `ConsultantProfile`(`consultant_id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `Schedule` ADD CONSTRAINT `Schedule_service_id_fkey` FOREIGN KEY (`service_id`) REFERENCES `Service`(`service_id`) ON DELETE RESTRICT ON UPDATE CASCADE;

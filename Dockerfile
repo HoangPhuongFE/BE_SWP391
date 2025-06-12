@@ -14,11 +14,11 @@ RUN npx prisma generate
 RUN pnpm run build
 
 RUN ls -la dist/
-RUN ls -la dist/src/   # kiểm tra nếu cần
+RUN ls -la dist/src/  
 
 RUN pnpm prune --prod
 
 ENV PORT=3001
 EXPOSE 3001
 
-CMD ["node", "dist/main"]   # hoặc dist/src/main nếu build ra đó
+CMD ["node", "dist/main"]  

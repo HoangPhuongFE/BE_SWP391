@@ -15,7 +15,7 @@ async function bootstrap() {
       forbidNonWhitelisted: false,
     }),
   );
- // --- Cấu hình Swagger có Bearer Auth ---
+  // --- Cấu hình Swagger có Bearer Auth ---
   const config = new DocumentBuilder()
     .setTitle('SWP - Graduation Thesis API')
     .setDescription('API Quản lí chu kỳ kinh nguyệt')
@@ -28,19 +28,23 @@ async function bootstrap() {
         name: 'Authorization',
         in: 'header',
       },
-      'access-token', 
+      'access-token',
     )
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api', app, document);
-//https://learnup.work/api
-//https://learnup.work/api/auth/google
-//http://localhost:3001/api
-//http://localhost:3001/api/auth/google
-// --- Cấu hình CORS ---
+  //https://learnup.work/api
+  //https://learnup.work/api/auth/google
+  //http://localhost:3001/api
+  //http://localhost:3001/api/auth/google
+  // --- Cấu hình CORS ---
   app.enableCors({
-    origin: process.env.FRONTEND_URL_PROD , 
+    origin: [
+      process.env.FRONTEND_URL_PROD,
+      process.env.FRONTEND_URL_LOCAL, 
+      "http://localhost:3000"
+    ],
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     credentials: true,
   });

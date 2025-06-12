@@ -7,7 +7,7 @@ export class PaymentWebhookController {
 
   constructor(private readonly paymentService: PaymentService) {}
 
-  @Post('callback')
+  @Post(['callback', 'webhook'])
   @HttpCode(200)
   async handlePayOSCallback(@Body() payload: any, @Headers('x-payos-signature') signature: string) {
     this.logger.log('Nhận callback từ PayOS:', payload);

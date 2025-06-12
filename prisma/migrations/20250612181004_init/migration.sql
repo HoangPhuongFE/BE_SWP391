@@ -113,11 +113,15 @@ CREATE TABLE `Appointment` (
     `status` ENUM('Pending', 'Confirmed', 'Completed', 'Cancelled') NOT NULL DEFAULT 'Pending',
     `location` VARCHAR(255) NULL,
     `payment_status` ENUM('Pending', 'Paid', 'Failed') NOT NULL DEFAULT 'Pending',
+    `is_free_consultation` BOOLEAN NOT NULL DEFAULT false,
     `consultation_notes` VARCHAR(191) NULL,
     `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updated_at` DATETIME(3) NOT NULL,
     `deleted_at` DATETIME(3) NULL,
+    `service_id` CHAR(36) NULL,
+    `schedule_id` CHAR(36) NULL,
 
+    UNIQUE INDEX `Appointment_schedule_id_key`(`schedule_id`),
     INDEX `Appointment_user_id_start_time_idx`(`user_id`, `start_time`),
     INDEX `Appointment_consultant_id_start_time_idx`(`consultant_id`, `start_time`),
     INDEX `Appointment_status_idx`(`status`),
@@ -127,15 +131,18 @@ CREATE TABLE `Appointment` (
 -- CreateTable
 CREATE TABLE `TestResult` (
     `result_id` CHAR(36) NOT NULL,
+    `test_code` VARCHAR(36) NOT NULL,
     `appointment_id` CHAR(36) NOT NULL,
     `service_id` CHAR(36) NOT NULL,
     `result_data` VARCHAR(191) NOT NULL,
+    `is_abnormal` BOOLEAN NOT NULL DEFAULT false,
     `status` ENUM('Pending', 'Processing', 'Completed') NOT NULL DEFAULT 'Pending',
     `notes` VARCHAR(191) NULL,
     `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updated_at` DATETIME(3) NOT NULL,
     `deleted_at` DATETIME(3) NULL,
 
+    UNIQUE INDEX `TestResult_test_code_key`(`test_code`),
     UNIQUE INDEX `TestResult_appointment_id_key`(`appointment_id`),
     INDEX `TestResult_status_idx`(`status`),
     PRIMARY KEY (`result_id`)
@@ -272,9 +279,11 @@ CREATE TABLE `Payment` (
     `status` ENUM('Pending', 'Completed', 'Failed', 'Refunded') NOT NULL DEFAULT 'Pending',
     `refund_amount` DECIMAL(10, 2) NULL,
     `refund_reason` VARCHAR(191) NULL,
+    `order_code` INTEGER NOT NULL,
     `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updated_at` DATETIME(3) NOT NULL,
 
+    UNIQUE INDEX `Payment_order_code_key`(`order_code`),
     INDEX `Payment_appointment_id_status_idx`(`appointment_id`, `status`),
     INDEX `Payment_user_id_status_idx`(`user_id`, `status`),
     PRIMARY KEY (`payment_id`)
@@ -313,6 +322,12 @@ ALTER TABLE `Appointment` ADD CONSTRAINT `Appointment_user_id_fkey` FOREIGN KEY 
 
 -- AddForeignKey
 ALTER TABLE `Appointment` ADD CONSTRAINT `Appointment_consultant_id_fkey` FOREIGN KEY (`consultant_id`) REFERENCES `ConsultantProfile`(`consultant_id`) ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `Appointment` ADD CONSTRAINT `Appointment_service_id_fkey` FOREIGN KEY (`service_id`) REFERENCES `Service`(`service_id`) ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `Appointment` ADD CONSTRAINT `Appointment_schedule_id_fkey` FOREIGN KEY (`schedule_id`) REFERENCES `Schedule`(`schedule_id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `TestResult` ADD CONSTRAINT `TestResult_appointment_id_fkey` FOREIGN KEY (`appointment_id`) REFERENCES `Appointment`(`appointment_id`) ON DELETE RESTRICT ON UPDATE CASCADE;

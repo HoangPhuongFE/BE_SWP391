@@ -217,27 +217,29 @@ model Service {
 }
 
 // Appointment: Quản lý lịch hẹn (tư vấn, xét nghiệm)
-// Appointment: Quản lý lịch hẹn (tư vấn, xét nghiệm)
 model Appointment {
   appointment_id    String            @id @default(uuid()) @db.Char(36)
   user_id           String            @db.Char(36)
   user              User              @relation(fields: [user_id], references: [user_id])
   consultant_id     String?           @db.Char(36)
   consultant        ConsultantProfile? @relation(fields: [consultant_id], references: [consultant_id])
-  type              AppointmentType   // Sử dụng ENUM
+  type              AppointmentType
   start_time        DateTime
   end_time          DateTime
-  status            AppointmentStatus @default(Pending) // Sử dụng ENUM
+  status            AppointmentStatus @default(Pending)
   location          String?           @db.VarChar(255)
-  payment_status    PaymentStatus     @default(Pending) // Sử dụng ENUM
+  payment_status    PaymentStatus     @default(Pending)
+  is_free_consultation Boolean @default(false)
   consultation_notes String?
   created_at        DateTime          @default(now())
   updated_at        DateTime          @updatedAt
   deleted_at        DateTime?
-  test_result       TestResult?       // Quan hệ 1-1 với TestResult
-  payments          Payment[]         // Quan hệ 1-nhiều với Payment
-  service_id        String?           @db.Char(36)       // Thêm trường service_id
-  service           Service?          @relation(fields: [service_id], references: [service_id], name: "ServiceAppointment") // Thêm relation với Service
+  test_result       TestResult?
+  payments          Payment[]
+  service_id        String?           @db.Char(36)
+  service           Service?          @relation(fields: [service_id], references: [service_id], name: "ServiceAppointment")
+  schedule_id       String?           @db.Char(36) @unique // Thêm @unique
+  schedule          Schedule?         @relation(fields: [schedule_id], references: [schedule_id], name: "AppointmentToSchedule")
 
   @@index([user_id, start_time])
   @@index([consultant_id, start_time])
@@ -247,11 +249,13 @@ model Appointment {
 // TestResult: Kết quả xét nghiệm STIs
 model TestResult {
   result_id     String            @id @default(uuid()) @db.Char(36)
+  test_code     String  @unique @db.VarChar(36)
   appointment_id String            @unique @db.Char(36)
   appointment   Appointment       @relation(fields: [appointment_id], references: [appointment_id])
   service_id    String            @db.Char(36)
   service       Service           @relation(fields: [service_id], references: [service_id])
   result_data   String
+  is_abnormal   Boolean @default(false)
   status        TestResultStatus  @default(Pending) // Sử dụng ENUM
   notes         String?
   created_at    DateTime          @default(now())
@@ -418,8 +422,8 @@ model Schedule {
   is_booked     Boolean   @default(false)
   created_at    DateTime  @default(now())
   deleted_at    DateTime?
+  appointment   Appointment? @relation(name: "AppointmentToSchedule")
 
   @@index([consultant_id, start_time])
   @@index([service_id])
-
 }

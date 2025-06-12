@@ -88,7 +88,7 @@ export class AuthService {
     const accessToken = this.jwtService.sign(payload, { expiresIn: '2h' });
     const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' });
 
-    console.log('Generated accessToken with expiresIn: 2h', accessToken); // Thêm log
+    //console.log('Generated accessToken with expiresIn: 2h', accessToken); // Thêm log
 
     await this.prisma.token.create({
       data: {

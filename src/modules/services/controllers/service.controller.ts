@@ -14,7 +14,7 @@ export class ServiceController {
   constructor(private readonly serviceService: ServiceService) {}
 
   @Post()
-  @Roles(Role.Manager, Role.Admin)
+  @Roles(Role.Manager)
   @UseGuards(AuthGuard('jwt'))
   @ApiOperation({ summary: 'Tạo dịch vụ mới' })
   @ApiBearerAuth('access-token')
@@ -24,7 +24,7 @@ export class ServiceController {
   }
 
   @Patch(':serviceId')
-  @Roles(Role.Manager, Role.Admin)
+  @Roles(Role.Manager)
   @UseGuards(AuthGuard('jwt'))
   @ApiOperation({ summary: 'Cập nhật thông tin và giá dịch vụ' })
   @ApiBearerAuth('access-token')
@@ -34,7 +34,7 @@ export class ServiceController {
   }
 
   @Delete(':serviceId')
-  @Roles(Role.Manager, Role.Admin)
+  @Roles(Role.Manager)
   @UseGuards(AuthGuard('jwt'))
   @ApiOperation({ summary: 'Xóa dịch vụ' })
   @ApiBearerAuth('access-token')
@@ -43,7 +43,6 @@ export class ServiceController {
   }
 
   @Get()
-  @Roles(Role.Manager, Role.Admin)
   @UseGuards(AuthGuard('jwt'))
   @ApiOperation({ summary: 'Xem danh sách tất cả dịch vụ' })
   @ApiBearerAuth('access-token')
@@ -54,7 +53,6 @@ export class ServiceController {
   }
 
   @Get(':serviceId')
-  @Roles(Role.Manager, Role.Admin)
   @UseGuards(AuthGuard('jwt'))
   @ApiOperation({ summary: 'Xem chi tiết dịch vụ theo ID' })
   @ApiBearerAuth('access-token')
@@ -63,7 +61,7 @@ export class ServiceController {
   }
 
   @Get(':serviceId/consultants')
-  @Roles(Role.Customer)
+  @Roles(Role.Customer , Role.Staff, Role.Manager)
   @UseGuards(AuthGuard('jwt'))
   @ApiOperation({ summary: 'Xem danh sách Consultant và lịch trống theo dịch vụ' })
   @ApiBearerAuth('access-token')

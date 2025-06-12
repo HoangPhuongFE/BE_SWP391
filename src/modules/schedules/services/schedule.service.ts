@@ -1,7 +1,8 @@
 // src/modules/schedules/services/schedule.service.ts
 import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
-import { CreateScheduleDto, UpdateScheduleDto } from '../dtos/create-schedule.dto';
+import { CreateScheduleDto, } from '../dtos/create-schedule.dto';
+import { UpdateScheduleDto } from '../dtos/update-schedule.dto';
 
 @Injectable()
 export class ScheduleService {
@@ -10,42 +11,75 @@ export class ScheduleService {
   constructor(private readonly prisma: PrismaService) {}
 
   async createSchedule(consultantId: string, dto: CreateScheduleDto) {
-    const { start_time, end_time, service_id } = dto;
-    const start = new Date(start_time);
-    const end = new Date(end_time);
+  const { start_time, end_time, service_id } = dto;
+  const start = new Date(start_time);
+  const end = new Date(end_time);
+  const now = new Date();
 
-    if (start >= end) {
-      throw new BadRequestException('Thời gian kết thúc phải sau thời gian bắt đầu');
-    }
-
-    const service = await this.prisma.service.findUnique({
-      where: { service_id, deleted_at: null },
-    });
-    if (!service) {
-      throw new BadRequestException('Dịch vụ không tồn tại');
-    }
-
-    const overlapping = await this.prisma.appointment.findFirst({
-      where: {
-        consultant_id: consultantId,
-        start_time: { lte: end },
-        end_time: { gte: start },
-        status: { not: 'Cancelled' },
-      },
-    });
-    if (overlapping) {
-      throw new BadRequestException('Thời gian đã bị trùng với lịch hẹn khác');
-    }
-
-    return this.prisma.schedule.create({
-      data: {
-        consultant_id: consultantId,
-        service_id,
-        start_time: start,
-        end_time: end,
-      },
-    });
+  // Kiểm tra định dạng thời gian
+  if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+    throw new BadRequestException('Định dạng thời gian không hợp lệ');
   }
+
+  // Kiểm tra thời gian trong tương lai
+  if (start <= now) {
+    throw new BadRequestException('Thời gian bắt đầu phải trong tương lai');
+  }
+
+  // Kiểm tra end_time sau start_time
+  if (start >= end) {
+    throw new BadRequestException('Thời gian kết thúc phải sau thời gian bắt đầu');
+  }
+
+  // Kiểm tra độ dài lịch (tối đa 4 giờ)
+  const durationHours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+  if (durationHours > 4) {
+    throw new BadRequestException('Lịch không được dài quá 4 giờ');
+  }
+
+  // Kiểm tra dịch vụ
+  const service = await this.prisma.service.findUnique({
+    where: { service_id, deleted_at: null },
+  });
+  if (!service) {
+    throw new BadRequestException('Dịch vụ không tồn tại');
+  }
+
+  // Kiểm tra trùng với lịch hẹn
+  const overlappingAppointment = await this.prisma.appointment.findFirst({
+    where: {
+      consultant_id: consultantId,
+      start_time: { lte: end },
+      end_time: { gte: start },
+      status: { not: 'Cancelled' },
+    },
+  });
+  if (overlappingAppointment) {
+    throw new BadRequestException('Thời gian trùng với lịch hẹn khác');
+  }
+
+  // Kiểm tra trùng với lịch trống khác
+  const overlappingSchedule = await this.prisma.schedule.findFirst({
+    where: {
+      consultant_id: consultantId,
+      start_time: { lte: end },
+      end_time: { gte: start },
+      deleted_at: null,
+    },
+  });
+  if (overlappingSchedule) {
+    throw new BadRequestException('Thời gian trùng với lịch trống khác');
+  }
+
+  return this.prisma.schedule.create({
+    data: {
+      consultant_id: consultantId,
+      service_id,
+      start_time: start,
+      end_time: end,
+    },
+  });
+}
 
   async getAllSchedules(consultantId: string) {
     return this.prisma.schedule.findMany({
@@ -133,4 +167,9 @@ export class ScheduleService {
       include: { consultant: true },
     });
   }
+  async getConsultantProfileById(consultantId: string) {
+  return this.prisma.consultantProfile.findUnique({
+    where: { consultant_id: consultantId },
+  });
+}
 }

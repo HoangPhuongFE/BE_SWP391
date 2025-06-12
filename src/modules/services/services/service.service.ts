@@ -12,10 +12,10 @@ export class ServiceService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly emailService: EmailService,
-  ) {}
+  ) { }
 
   async createService(dto: CreateServiceDto) {
-    const { name, category } = dto;
+    const { name, category, is_active = true } = dto;
     const existing = await this.prisma.service.findFirst({
       where: { category, name, deleted_at: null },
     });
@@ -23,7 +23,7 @@ export class ServiceService {
       throw new BadRequestException('Danh mục và tên dịch vụ đã tồn tại');
     }
 
-    return this.prisma.service.create({ data: dto });
+    return this.prisma.service.create({ data: { ...dto, is_active } });
   }
 
   async updateService(serviceId: string, dto: UpdateServiceDto) {
@@ -42,19 +42,6 @@ export class ServiceService {
       where: { service_id: serviceId },
       data: dto,
     });
-
-    if (
-      dto.price !== undefined &&
-      Number(dto.price) !== Number(service.price)
-    ) {
-      const users = await this.prisma.user.findMany({ where: { is_active: true } });
-      const emails = users.map((user) => user.email).join(',');
-      await this.emailService.sendEmail(
-        emails,
-        'Cập nhật bảng giá dịch vụ',
-        `Giá dịch vụ ${service.name} đã thay đổi thành ${dto.price} VND. Kiểm tra tại: http://your-frontend.com/services`,
-      );
-    }
 
     return { service: updatedService, message: 'Cập nhật dịch vụ thành công' };
   }
@@ -92,9 +79,37 @@ export class ServiceService {
   }
 
   async getConsultantsWithSchedules(serviceId: string, date?: string) {
+    // Kiểm tra dịch vụ
+    const service = await this.prisma.service.findUnique({
+      where: { service_id: serviceId, deleted_at: null },
+    });
+    if (!service) {
+      throw new BadRequestException('Dịch vụ không tồn tại hoặc đã bị xóa');
+    }
+
     const where = date ? { start_time: { gte: new Date(date), lte: new Date(date + 'T23:59:59Z') } } : {};
+
+    // Lấy danh sách consultant_id từ bảng schedules
+    const schedules = await this.prisma.schedule.findMany({
+      where: {
+        service_id: serviceId,
+        is_booked: false,
+        deleted_at: null,
+        ...where,
+      },
+      select: { consultant_id: true },
+      distinct: ['consultant_id'],
+    });
+
+    const consultantIds = schedules.map(s => s.consultant_id);
+
+    // Lấy thông tin tư vấn viên dựa trên consultantIds
     const consultants = await this.prisma.consultantProfile.findMany({
-      where: { is_verified: true, deleted_at: null },
+      where: {
+        consultant_id: { in: consultantIds },
+        is_verified: true,
+        deleted_at: null,
+      },
       include: {
         user: true,
         schedules: {
@@ -109,6 +124,10 @@ export class ServiceService {
     });
 
     return {
+      service: {
+        service_id: service.service_id,
+        name: service.name,
+      },
       consultants: consultants.map((c) => ({
         consultant_id: c.consultant_id,
         full_name: c.user?.full_name || 'Unknown',

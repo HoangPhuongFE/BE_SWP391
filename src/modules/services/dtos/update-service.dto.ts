@@ -1,5 +1,4 @@
-// src/modules/services/dtos/update-service.dto.ts
-import { IsString, IsDecimal, Min, IsBoolean, IsOptional } from 'class-validator';
+import { IsString, IsNumber, Min, IsBoolean, IsOptional } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class UpdateServiceDto {
@@ -9,7 +8,7 @@ export class UpdateServiceDto {
   name?: string;
 
   @ApiProperty({ example: 2000000, description: 'Giá dịch vụ', required: false })
-  @IsDecimal()
+  @IsNumber()
   @Min(0)
   @IsOptional()
   price?: number;

@@ -1,15 +1,15 @@
-// src/modules/schedules/controllers/schedule.controller.ts
-import { Controller, Post, Get, Patch, Delete, Body, Param, Query, UseGuards, Req } from '@nestjs/common';
+import { Controller, Post, Get, Patch, Delete, Body, Param, UseGuards, Req } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
 import { ScheduleService } from '../services/schedule.service';
-import { CreateScheduleDto, UpdateScheduleDto } from '../dtos/create-schedule.dto';
+import { CreateScheduleDto } from '../dtos/create-schedule.dto';
+import { UpdateScheduleDto } from '../dtos/update-schedule.dto';
 import { Roles } from '../../auth/decorators/roles.decorator';
 import { Role } from '@prisma/client';
 import { BadRequestException } from '@nestjs/common';
 
 @ApiTags('Schedules')
-@Controller('consultants/:consultantId/schedules')
+@Controller('schedules')
 export class ScheduleController {
   constructor(private readonly scheduleService: ScheduleService) {}
 
@@ -19,27 +19,66 @@ export class ScheduleController {
   @ApiOperation({ summary: 'Tạo lịch trống cho Consultant' })
   @ApiBearerAuth('access-token')
   @ApiBody({ type: CreateScheduleDto })
-  async createSchedule(@Param('consultantId') consultantId: string, @Body() dto: CreateScheduleDto, @Req() req) {
+  async createSchedule(@Body() dto: CreateScheduleDto, @Req() req) {
     const userId = (req.user as any).userId;
     const consultant = await this.scheduleService.getConsultantProfile(userId);
-    if (!consultant || consultant.consultant_id !== consultantId) {
-      throw new BadRequestException('Không có quyền tạo lịch cho Consultant này');
+    if (!consultant) {
+      throw new BadRequestException('Không tìm thấy hồ sơ Consultant');
     }
-    return this.scheduleService.createSchedule(consultantId, dto);
+    return this.scheduleService.createSchedule(consultant.consultant_id, dto);
   }
 
   @Get()
-  @ApiOperation({ summary: 'Xem tất cả lịch trống của Consultant' })
+  @Roles(Role.Consultant)
+  @UseGuards(AuthGuard('jwt'))
+  @ApiOperation({ summary: 'Consultant xem tất cả lịch trống của chính mình' })
   @ApiBearerAuth('access-token')
-  async getAllSchedules(@Param('consultantId') consultantId: string) {
-    return this.scheduleService.getAllSchedules(consultantId);
+  async getAllSchedules(@Req() req) {
+    const userId = (req.user as any).userId;
+    const consultant = await this.scheduleService.getConsultantProfile(userId);
+    if (!consultant) {
+      throw new BadRequestException('Không tìm thấy hồ sơ Consultant');
+    }
+    return this.scheduleService.getAllSchedules(consultant.consultant_id);
   }
 
   @Get(':scheduleId')
+  @UseGuards(AuthGuard('jwt'))
   @ApiOperation({ summary: 'Xem chi tiết lịch trống theo ID' })
   @ApiBearerAuth('access-token')
-  async getScheduleById(@Param('scheduleId') scheduleId: string) {
-    return this.scheduleService.getScheduleById(scheduleId);
+  async getScheduleById(@Param('scheduleId') scheduleId: string, @Req() req) {
+    const userId = (req.user as any).userId;
+    const role = (req.user as any).role;
+    
+    const schedule = await this.scheduleService.getScheduleWithConsultant(scheduleId);
+    if (!schedule) {
+      throw new BadRequestException('Lịch không tồn tại');
+    }
+    
+    // Consultant chỉ xem lịch của chính họ, Manager có thể xem bất kỳ lịch nào
+    if (role === Role.Consultant) {
+      const consultant = await this.scheduleService.getConsultantProfile(userId);
+      if (!consultant || schedule.consultant_id !== consultant.consultant_id) {
+        throw new BadRequestException('Không có quyền xem lịch này');
+      }
+    } else if (role !== Role.Manager) {
+      throw new BadRequestException('Không có quyền xem lịch này');
+    }
+    
+    return { schedule };
+  }
+
+  @Get('consultants/:consultantId')
+  @Roles(Role.Manager)
+  @UseGuards(AuthGuard('jwt'))
+  @ApiOperation({ summary: 'Manager xem tất cả lịch trống của một Consultant' })
+  @ApiBearerAuth('access-token')
+  async getConsultantSchedules(@Param('consultantId') consultantId: string) {
+    const consultant = await this.scheduleService.getConsultantProfileById(consultantId);
+    if (!consultant) {
+      throw new BadRequestException('Không tìm thấy hồ sơ Consultant');
+    }
+    return this.scheduleService.getAllSchedules(consultantId);
   }
 
   @Patch(':scheduleId')

@@ -40,6 +40,7 @@ async function bootstrap() {
   //http://localhost:3001/api/auth/google
   // --- Cấu hình CORS ---
   app.enableCors({
+    //
     origin: [
       process.env.FRONTEND_URL_PROD,
       process.env.FRONTEND_URL_LOCAL, 

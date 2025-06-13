@@ -9,8 +9,11 @@ export class PaymentWebhookController {
 
   @Post(['callback', 'webhook'])
   @HttpCode(200)
-  async handlePayOSCallback(@Body() payload: any, @Headers('x-payos-signature') signature: string) {
-    this.logger.log('Nhận callback từ PayOS:', payload);
+  async handlePayOSCallback(
+    @Body() payload: any,
+    @Headers('x-payos-signature') signature: string
+  ) {
+    this.logger.log('Nhận callback từ PayOS:', JSON.stringify(payload));
     await this.paymentService.processPaymentCallback(payload);
     return { message: 'Callback received' };
   }

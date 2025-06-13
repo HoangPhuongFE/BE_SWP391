@@ -10,7 +10,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     if (!jwtSecret) {
       throw new Error('JWT_SECRET is not defined in configuration');
     }
-    console.log('JwtStrategy initialized with secret:', jwtSecret);
+   // console.log('JwtStrategy initialized with secret:', jwtSecret);
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,

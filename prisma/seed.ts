@@ -1,4 +1,4 @@
-import { PrismaClient, Gender } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
@@ -23,7 +23,7 @@ async function main() {
       phone_number: '0900000001',
       customerProfile: {
         date_of_birth: new Date('1995-05-10'),
-        gender: Gender.Male,
+        gender: 'Male' as any, // Cast to match Prisma Gender enum
         medical_history: 'No known allergies',
         privacy_settings: {},
       },
@@ -35,7 +35,7 @@ async function main() {
       phone_number: '0900000001',
       customerProfile: {
         date_of_birth: new Date('1995-05-10'),
-        gender: Gender.Male,
+        gender: 'Male',
         medical_history: 'No known allergies',
         privacy_settings: {},
       },
@@ -47,7 +47,7 @@ async function main() {
       phone_number: '0900000001',
       customerProfile: {
         date_of_birth: new Date('1995-05-10'),
-        gender: Gender.Male,
+        gender: 'Male',
         medical_history: 'No known allergies',
         privacy_settings: {},
       },

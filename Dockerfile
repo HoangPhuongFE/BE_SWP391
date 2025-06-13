@@ -12,20 +12,15 @@ COPY . .
 
 RUN npx prisma generate
 
-# --- Thêm bước này để seed ---
-# 1. Cài ts-node và typescript để seed (devDeps)
-RUN pnpm add -D ts-node typescript
-
-# 2. Nếu muốn seed luôn khi build image:
-# RUN pnpm run seed
-# hoặc:
-# RUN npx prisma db seed
-
-# Hoặc bạn seed thủ công sau khi container chạy (xem hướng dẫn bên dưới)
-# Sau seed thì prune luôn devDeps
-RUN pnpm prune --prod
-
+# Build trước khi prune!
 RUN pnpm run build
+
+# (Nếu cần seed, thêm các dòng này trước prune)
+ RUN pnpm add -D ts-node typescript
+# RUN pnpm run seed
+
+# Sau build mới prune để nhẹ image
+RUN pnpm prune --prod
 
 RUN ls -la dist/
 RUN ls -la dist/src/

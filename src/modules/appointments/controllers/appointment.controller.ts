@@ -13,7 +13,7 @@ import { Role } from '@prisma/client';
 @ApiTags('Appointments')
 @Controller('appointments')
 export class AppointmentController {
-  constructor(private readonly appointmentService: AppointmentService) {}
+  constructor(private readonly appointmentService: AppointmentService) { }
 
   @Post()
   @Roles(Role.Customer)
@@ -26,10 +26,11 @@ export class AppointmentController {
     return this.appointmentService.createAppointment({ ...dto, userId });
   }
 
-    @Post('sti')
+  // src/modules/appointments/controllers/appointment.controller.ts
+  @Post('sti')
   @Roles(Role.Customer)
   @UseGuards(AuthGuard('jwt'))
-  @ApiOperation({ summary: 'Đặt lịch xét nghiệm STI hoặc xét nghiệm khác' })
+  @ApiOperation({ summary: 'Đặt lịch xét nghiệm (customer tự chọn giờ)' })
   @ApiBearerAuth('access-token')
   @ApiBody({ type: CreateStiAppointmentDto })
   async createStiAppointment(
@@ -40,8 +41,8 @@ export class AppointmentController {
     return this.appointmentService.createStiAppointment({ ...dto, userId });
   }
 
-   @Get()
-  @Roles(Role.Staff, Role.Manager)   
+  @Get()
+  @Roles(Role.Staff, Role.Manager)
   @UseGuards(AuthGuard('jwt'))
   @ApiOperation({ summary: 'Xem tất cả lịch hẹn (Staff/Manager/Admin)' })
   @ApiBearerAuth('access-token')
@@ -88,19 +89,19 @@ export class AppointmentController {
     return this.appointmentService.deleteAppointment(appointmentId);
   }
 
-  
+
   @Get('test-results/:testCode')
   @Roles(Role.Customer)
   @UseGuards(AuthGuard('jwt'))
   @ApiOperation({ summary: 'Lấy kết quả xét nghiệm theo mã testCode' })
   @ApiBearerAuth('access-token')
   @ApiParam({ name: 'testCode', required: true, description: 'Mã xét nghiệm' })
-  async getTestResultByCode(
+  async getTestResult(
     @Param('testCode') testCode: string,
     @Req() req
   ) {
     const userId = (req.user as any).userId;
-    return this.appointmentService.getTestResultByCode(testCode, userId);
+    return this.appointmentService.getTestResult(testCode, userId);
   }
 
 }

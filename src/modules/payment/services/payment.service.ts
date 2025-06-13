@@ -104,10 +104,13 @@ export class PaymentService {
       throw new BadRequestException('orderCode không hợp lệ!');
     }
 
-    const existing = await this.prisma.payment.findUnique({ where: { order_code: orderCode } });
+    const existing = await this.prisma.payment.findUnique({
+      where: { order_code: orderCode },
+    });
+
     if (!existing) {
-      this.logger.error(`Không tìm thấy payment với orderCode ${orderCode}`);
-      throw new BadRequestException(`Không tìm thấy payment với orderCode ${orderCode}`);
+      this.logger.warn(`Callback nhận về nhưng không tìm thấy payment orderCode=${orderCode}`);
+      return; // hoặc return null
     }
 
     const txStatus = payload.data?.status || payload.status || payload.data?.desc;

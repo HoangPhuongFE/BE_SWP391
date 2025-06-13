@@ -1,8 +1,8 @@
 import { Injectable, BadRequestException, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import PayOS from '@payos/node';
-import { CreatePaymentDto } from '../dtos/create-payment.dto';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { CreatePaymentDto } from '../dtos/create-payment.dto';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class PaymentService {
@@ -10,53 +10,37 @@ export class PaymentService {
   private readonly payos: PayOS;
 
   constructor(
-    private configService: ConfigService,
+    private config: ConfigService,
     private prisma: PrismaService,
   ) {
-    const clientId = this.configService.get<string>('PAYOS_CLIENT_ID');
-    const apiKey = this.configService.get<string>('PAYOS_API_KEY');
-    const checksumKey = this.configService.get<string>('PAYOS_CHECKSUM_KEY');
-    if (!clientId || !apiKey || !checksumKey) {
-      throw new BadRequestException('Thiếu thông tin cấu hình PayOS');
-    }
-    this.payos = new PayOS(clientId, apiKey, checksumKey);
+    const id = this.config.get('PAYOS_CLIENT_ID');
+    const key = this.config.get('PAYOS_API_KEY');
+    const ck  = this.config.get('PAYOS_CHECKSUM_KEY');
+    if (!id||!key||!ck) throw new BadRequestException('Thiếu PayOS config');
+    this.payos = new PayOS(id, key, ck);
   }
 
-  /**
-   * Tạo link thanh toán và lưu record Payment vào DB
-   */
   async createPaymentLink(userId: string, dto: CreatePaymentDto) {
     const {
-      orderCode,
-      amount,
-      description,
-      cancelUrl,
-      returnUrl,
-      buyerName,
-      buyerEmail,
-      buyerPhone,
-      paymentMethod,
-      appointmentId,
+      orderCode, amount, description,
+      cancelUrl, returnUrl,
+      buyerName, buyerEmail, buyerPhone,
+      paymentMethod, appointmentId,
     } = dto;
 
-    let paymentLinkData;
+    let linkData;
     try {
-      paymentLinkData = await this.payos.createPaymentLink({
-        orderCode,
-        amount,
-        description,
-        cancelUrl,
-        returnUrl,
-        buyerName,
-        buyerEmail,
-        buyerPhone,
+      linkData = await this.payos.createPaymentLink({
+        orderCode, amount, description,
+        cancelUrl, returnUrl,
+        buyerName, buyerEmail, buyerPhone,
       });
-    } catch (error) {
-      this.logger.error(`Lỗi tạo liên kết thanh toán: ${error.message}`, error.stack);
-      throw new BadRequestException('Không thể tạo liên kết thanh toán');
+    } catch (e) {
+      this.logger.error('Tạo link lỗi', e);
+      throw new BadRequestException('Không thể tạo link thanh toán');
     }
 
-    // Lưu record vào DB (nếu lỗi vẫn trả link nhưng ghi log)
+    // Lưu vào DB
     try {
       await this.prisma.payment.create({
         data: {
@@ -68,83 +52,70 @@ export class PaymentService {
           status: 'Pending',
         },
       });
-    } catch (dbError) {
-      this.logger.error('Không thể lưu payment vào DB:', dbError);
+    } catch (e) {
+      this.logger.error('Lưu payment lỗi', e);
     }
 
-    return {
-      paymentLink: paymentLinkData,
-      message: 'Tạo liên kết thanh toán và lưu thành công',
-    };
+    return { paymentLink: linkData, message: 'OK' };
   }
 
-  /**
-   * Lấy thông tin link thanh toán từ PayOS
-   */
   async getPaymentLinkInfo(orderCode: number) {
     try {
-      const paymentInfo = await this.payos.getPaymentLinkInformation(orderCode);
-      return { paymentInfo, message: 'Lấy thông tin thanh toán thành công' };
-    } catch (error) {
-      this.logger.error(`Lỗi lấy thông tin thanh toán: ${error.message}`, error.stack);
-      throw new BadRequestException('Không thể lấy thông tin thanh toán');
+      const info = await this.payos.getPaymentLinkInformation(orderCode);
+      return { paymentInfo: info, message: 'OK' };
+    } catch (e) {
+      this.logger.error('Lấy info lỗi', e);
+      throw new BadRequestException('Không thể lấy thông tin');
     }
   }
-
-  /**
-   * Xử lý callback từ PayOS: update Payment, Appointment, và Schedule
-   */
 
   async processPaymentCallback(payload: any) {
-  this.logger.log('PayOS callback payload:', JSON.stringify(payload));
+    this.logger.log('Callback payload:', payload);
 
-  const orderCode = Number(payload.data?.orderCode);
-  if (!orderCode) {
-    this.logger.error('orderCode không hợp lệ', payload);
-    return;
-  }
+    const codeRaw = payload.data?.orderCode ?? payload.data?.order_code;
+    const orderCode = Number(codeRaw);
+    if (!orderCode) return;
 
-  // include appointment để có schedule_id
-  const existing = await this.prisma.payment.findUnique({
-    where: { order_code: orderCode },
-    include: { appointment: true },
-  });
-  if (!existing) {
-    this.logger.warn(`Không tìm thấy payment orderCode=${orderCode}`);
-    return;
-  }
-
-  const success = payload.success === true || payload.data?.code === '00';
-  const cancelled = payload.data?.status === 'CANCELLED';
-  const newStatus = success
-    ? 'Completed'
-    : cancelled
-    ? 'Failed'
-    : 'Pending';
-
-  await this.prisma.payment.update({
-    where: { order_code: orderCode },
-    data: { status: newStatus },
-  });
-
-  if (newStatus === 'Completed') {
-    // cập nhật appointment
-    await this.prisma.appointment.update({
-      where: { appointment_id: existing.appointment_id },
-      data: { payment_status: 'Paid' },
+    // Tìm payment kèm appointment
+    const existing = await this.prisma.payment.findUnique({
+      where: { order_code: orderCode },
+      include: { appointment: true },
     });
-    // đánh dấu schedule đã book
-    const sid = existing.appointment.schedule_id;
-    if (sid) {
-      await this.prisma.schedule.update({
-        where: { schedule_id: sid },
-        data: { is_booked: true },
-      });
+    if (!existing) {
+      this.logger.warn(`Không tìm thấy payment ${orderCode}`);
+      return;
     }
+
+    const tx = payload.data?.status || payload.status || payload.data?.desc;
+    let newStatus: 'Pending' | 'Completed' | 'Failed' = 'Pending';
+    if (tx === 'PAID' || tx === 'Thành công') newStatus = 'Completed';
+    else if (tx === 'CANCELLED') newStatus = 'Failed';
+
+    // 1) update payment.status
+    await this.prisma.payment.update({
+      where: { order_code: orderCode },
+      data: { status: newStatus },
+    });
+
+    if (newStatus === 'Completed') {
+      // 2) update appointment.payment_status and appointment.status
+      await this.prisma.appointment.update({
+        where: { appointment_id: existing.appointment_id },
+        data: {
+          payment_status: 'Paid',
+          status:         'Confirmed',
+        },
+      });
+      // 3) đánh dấu schedule.is_booked
+      const sid = existing.appointment.schedule_id;
+      if (sid) {
+        await this.prisma.schedule.update({
+          where: { schedule_id: sid },
+          data: { is_booked: true },
+        });
+      }
+    }
+
+    this.logger.log(`Cập nhật callback hoàn tất cho ${orderCode}`);
   }
-
-  this.logger.log(`Cập nhật callback thành công cho orderCode ${orderCode}`);
-}
-
-
 }

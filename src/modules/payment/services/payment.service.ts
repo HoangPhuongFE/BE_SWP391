@@ -1,3 +1,4 @@
+// src/modules/payment/services/payment.service.ts
 import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import PayOS from '@payos/node';
@@ -16,20 +17,16 @@ export class PaymentService {
     const clientId = this.configService.get<string>('PAYOS_CLIENT_ID');
     const apiKey = this.configService.get<string>('PAYOS_API_KEY');
     const checksumKey = this.configService.get<string>('PAYOS_CHECKSUM_KEY');
-
     if (!clientId || !apiKey || !checksumKey) {
       throw new BadRequestException('Thiếu thông tin cấu hình PayOS');
     }
-
-    try {
-      this.payos = new PayOS(clientId, apiKey, checksumKey);
-    } catch (error) {
-      this.logger.error(`Lỗi khởi tạo PayOS: ${error.message}`, error.stack);
-      throw new BadRequestException('Không thể khởi tạo PayOS');
-    }
+    this.payos = new PayOS(clientId, apiKey, checksumKey);
   }
 
-  async createPaymentLink(dto: CreatePaymentDto) {
+  /**
+   * Tạo link thanh toán và lưu record Payment vào DB
+   */
+  async createPaymentLink(userId: string, dto: CreatePaymentDto) {
     const {
       orderCode,
       amount,
@@ -39,10 +36,13 @@ export class PaymentService {
       buyerName,
       buyerEmail,
       buyerPhone,
+      paymentMethod,
+      appointmentId,
     } = dto;
 
+    let paymentLinkData;
     try {
-      const paymentLinkData = await this.payos.createPaymentLink({
+      paymentLinkData = await this.payos.createPaymentLink({
         orderCode,
         amount,
         description,
@@ -52,17 +52,35 @@ export class PaymentService {
         buyerEmail,
         buyerPhone,
       });
-
-      return {
-        paymentLink: paymentLinkData,
-        message: 'Tạo liên kết thanh toán thành công',
-      };
     } catch (error) {
       this.logger.error(`Lỗi tạo liên kết thanh toán: ${error.message}`, error.stack);
       throw new BadRequestException('Không thể tạo liên kết thanh toán');
     }
+
+    try {
+      await this.prisma.payment.create({
+        data: {
+          user_id: userId,
+          appointment_id: appointmentId,
+          order_code: orderCode,
+          amount,
+          payment_method: paymentMethod,
+          status: 'Pending',
+        },
+      });
+    } catch (dbError) {
+      this.logger.error('Không thể lưu payment vào DB:', dbError);
+    }
+
+    return {
+      paymentLink: paymentLinkData,
+      message: 'Tạo liên kết thanh toán và lưu thành công',
+    };
   }
 
+  /**
+   * Lấy thông tin link thanh toán từ PayOS
+   */
   async getPaymentLinkInfo(orderCode: number) {
     try {
       const paymentInfo = await this.payos.getPaymentLinkInformation(orderCode);
@@ -73,42 +91,42 @@ export class PaymentService {
     }
   }
 
+  /**
+   * Xử lý callback từ PayOS: update Payment & Appointment
+   */
   async processPaymentCallback(payload: any) {
-  this.logger.log('PayOS callback payload:', JSON.stringify(payload));
+    this.logger.log('PayOS callback payload:', JSON.stringify(payload));
 
-  // Lấy orderCode từ đúng vị trí
-  const orderCodeRaw = payload.data?.orderCode ?? payload.data?.order_code;
-  const orderCode = Number(orderCodeRaw);
+    const orderCodeRaw = payload.data?.orderCode ?? payload.data?.order_code;
+    const orderCode = Number(orderCodeRaw);
+    if (!orderCode || isNaN(orderCode)) {
+      this.logger.error('orderCode bị thiếu hoặc không hợp lệ:', payload);
+      throw new BadRequestException('orderCode không hợp lệ!');
+    }
 
-  if (!orderCode || isNaN(orderCode)) {
-    this.logger.error('orderCode bị thiếu hoặc không hợp lệ:', payload);
-    throw new BadRequestException('orderCode không hợp lệ!');
-  }
+    const existing = await this.prisma.payment.findUnique({ where: { order_code: orderCode } });
+    if (!existing) {
+      this.logger.error(`Không tìm thấy payment với orderCode ${orderCode}`);
+      throw new BadRequestException(`Không tìm thấy payment với orderCode ${orderCode}`);
+    }
 
-  // Nếu status cũng nằm trong data thì lấy từ data luôn (PayOS có thể trả ở đây)
-  const transactionStatus = payload.data?.status || payload.status || payload.data?.desc;
+    const txStatus = payload.data?.status || payload.status || payload.data?.desc;
+    let newStatus: 'Pending' | 'Completed' | 'Failed' = 'Pending';
+    if (txStatus === 'PAID' || txStatus === 'Thành công') newStatus = 'Completed';
+    else if (txStatus === 'CANCELLED') newStatus = 'Failed';
 
-  let newStatus = 'Pending';
-  if (transactionStatus === 'PAID' || transactionStatus === 'Thành công') {
-    newStatus = 'Completed';
-  } else if (transactionStatus === 'CANCELLED') {
-    newStatus = 'Failed';
-  }
-
-  // Update như bình thường
-  const payment = await this.prisma.payment.update({
-    where: { order_code: orderCode },
-    data: { status: newStatus as any },
-  });
-
-  if (newStatus === 'Completed') {
-    await this.prisma.appointment.update({
-      where: { appointment_id: payment.appointment_id },
-      data: { payment_status: 'Paid' },
+    await this.prisma.payment.update({
+      where: { order_code: orderCode },
+      data: { status: newStatus },
     });
+
+    if (newStatus === 'Completed') {
+      await this.prisma.appointment.update({
+        where: { appointment_id: existing.appointment_id },
+        data: { payment_status: 'Paid' },
+      });
+    }
+
+    this.logger.log(`Cập nhật callback thành công cho orderCode ${orderCode}`);
   }
-
-  this.logger.log(`Cập nhật callback thành công cho orderCode ${orderCode}`);
-}
-
 }

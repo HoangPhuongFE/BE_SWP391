@@ -1,5 +1,7 @@
+// src/modules/payment/dtos/create-payment.dto.ts
 import { IsInt, IsString, IsOptional, IsUrl } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { PaymentMethod } from '@prisma/client';
 
 export class CreatePaymentDto {
   @ApiProperty({ example: 123456789, description: 'Mã đơn hàng (số)' })
@@ -36,4 +38,12 @@ export class CreatePaymentDto {
   @IsOptional()
   @IsString()
   buyerPhone?: string;
+
+  @ApiProperty({ example: 'BankCard', enum: PaymentMethod, description: 'Phương thức thanh toán' })
+  @IsString()
+  paymentMethod: PaymentMethod;
+
+  @ApiProperty({ example: 'a238e2dd-2cc7-46e5-a125-f96b6fc4b7cf', description: 'ID appointment' })
+  @IsString()
+  appointmentId: string;
 }

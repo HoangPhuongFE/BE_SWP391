@@ -1,10 +1,11 @@
-import { Controller, Post, Body, UseGuards, Param, Get } from '@nestjs/common';
+// src/modules/payment/controllers/payment.controller.ts
+import { Controller, Post, Body, UseGuards, Get, Param, Req } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
-import { PaymentService } from '../services/payment.service';
-import { CreatePaymentDto } from '../dtos/create-payment.dto';
 import { Roles } from '../../auth/decorators/roles.decorator';
 import { Role } from '@prisma/client';
+import { CreatePaymentDto } from '../dtos/create-payment.dto';
+import { PaymentService } from '../services/payment.service';
 
 @ApiTags('Payment')
 @Controller('payment')
@@ -17,8 +18,9 @@ export class PaymentController {
   @ApiOperation({ summary: 'Tạo liên kết thanh toán' })
   @ApiBearerAuth('access-token')
   @ApiBody({ type: CreatePaymentDto })
-  async createPaymentLink(@Body() dto: CreatePaymentDto) {
-    return this.paymentService.createPaymentLink(dto);
+  async createPaymentLink(@Req() req, @Body() dto: CreatePaymentDto) {
+    const userId = (req.user as any).userId;
+    return this.paymentService.createPaymentLink(userId, dto);
   }
 
   @Get('link/:orderCode')

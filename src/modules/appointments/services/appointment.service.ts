@@ -112,11 +112,13 @@ export class AppointmentService {
         orderCode: orderCode,
         amount: Number(service.price),
         description: shortDesc,
-        cancelUrl: 'http://your-frontend.com/cancel',
-        returnUrl: 'http://your-frontend.com/success',
+        cancelUrl: 'https://project-swp391.vercel.app/',
+        returnUrl: 'https://project-swp391.vercel.app/',
         buyerName: userId,
+        paymentMethod: 'BankCard',
+        appointmentId: ''
       };
-      const paymentResponse = await this.paymentService.createPaymentLink(paymentDto);
+      const paymentResponse = await this.paymentService.createPaymentLink(userId, paymentDto);
       paymentLink = paymentResponse.paymentLink.checkoutUrl;
     }
 
@@ -201,12 +203,14 @@ export class AppointmentService {
       orderCode: orderCode,
       amount: Number(service.price),
       description: shortDesc,
-      cancelUrl: 'http://your-frontend.com/cancel',
-      returnUrl: 'http://your-frontend.com/success',
+      cancelUrl: 'https://project-swp391.vercel.app/',
+      returnUrl: 'https://project-swp391.vercel.app/',
       buyerName: dto.userId,
+      paymentMethod: 'BankCard',
+      appointmentId: ''
     };
 
-    const paymentResponse = await this.paymentService.createPaymentLink(paymentDto);
+    const paymentResponse = await this.paymentService.createPaymentLink(dto.userId, paymentDto);
     const paymentLink = paymentResponse.paymentLink.checkoutUrl;
 
     const appointment = await this.prisma.appointment.create({

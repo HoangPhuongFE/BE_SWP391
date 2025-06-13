@@ -74,41 +74,41 @@ export class PaymentService {
   }
 
   async processPaymentCallback(payload: any) {
-    this.logger.log('PayOS callback payload:', JSON.stringify(payload));
+  this.logger.log('PayOS callback payload:', JSON.stringify(payload));
 
-    // Lấy orderCode từ payload (tùy PayOS trả về dạng nào)
-    const orderCodeRaw = payload.orderCode ?? payload.order_code;
-    const orderCode = Number(orderCodeRaw);
+  // Lấy orderCode từ đúng vị trí
+  const orderCodeRaw = payload.data?.orderCode ?? payload.data?.order_code;
+  const orderCode = Number(orderCodeRaw);
 
-    if (!orderCode || isNaN(orderCode)) {
-      this.logger.error('orderCode bị thiếu hoặc không hợp lệ:', payload);
-      throw new BadRequestException('orderCode không hợp lệ!');
-    }
-
-    const transactionStatus = payload.status;
-    let newStatus = 'Pending';
-    if (transactionStatus === 'PAID') {
-      newStatus = 'Completed';
-    } else if (transactionStatus === 'CANCELLED') {
-      newStatus = 'Failed';
-    }
-
-    // Cập nhật payment
-    const payment = await this.prisma.payment.update({
-      where: { order_code: orderCode },
-      data: {
-        status: newStatus as any,
-      },
-    });
-
-    // Nếu đã thanh toán, cập nhật appointment
-    if (newStatus === 'Completed') {
-      await this.prisma.appointment.update({
-        where: { appointment_id: payment.appointment_id },
-        data: { payment_status: 'Paid' },
-      });
-    }
-
-    this.logger.log(`Cập nhật callback thành công cho orderCode ${orderCode}`);
+  if (!orderCode || isNaN(orderCode)) {
+    this.logger.error('orderCode bị thiếu hoặc không hợp lệ:', payload);
+    throw new BadRequestException('orderCode không hợp lệ!');
   }
+
+  // Nếu status cũng nằm trong data thì lấy từ data luôn (PayOS có thể trả ở đây)
+  const transactionStatus = payload.data?.status || payload.status || payload.data?.desc;
+
+  let newStatus = 'Pending';
+  if (transactionStatus === 'PAID' || transactionStatus === 'Thành công') {
+    newStatus = 'Completed';
+  } else if (transactionStatus === 'CANCELLED') {
+    newStatus = 'Failed';
+  }
+
+  // Update như bình thường
+  const payment = await this.prisma.payment.update({
+    where: { order_code: orderCode },
+    data: { status: newStatus as any },
+  });
+
+  if (newStatus === 'Completed') {
+    await this.prisma.appointment.update({
+      where: { appointment_id: payment.appointment_id },
+      data: { payment_status: 'Paid' },
+    });
+  }
+
+  this.logger.log(`Cập nhật callback thành công cho orderCode ${orderCode}`);
+}
+
 }

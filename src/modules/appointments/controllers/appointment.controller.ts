@@ -40,10 +40,10 @@ export class AppointmentController {
     return this.appointmentService.createStiAppointment({ ...dto, userId });
   }
 
-  @Get()
-  @Roles(Role.Manager, Role.Admin)
+   @Get()
+  @Roles(Role.Staff, Role.Manager)   
   @UseGuards(AuthGuard('jwt'))
-  @ApiOperation({ summary: 'Xem tất cả lịch hẹn' })
+  @ApiOperation({ summary: 'Xem tất cả lịch hẹn (Staff/Manager/Admin)' })
   @ApiBearerAuth('access-token')
   async getAllAppointments() {
     return this.appointmentService.getAllAppointments();
@@ -102,4 +102,5 @@ export class AppointmentController {
     const userId = (req.user as any).userId;
     return this.appointmentService.getTestResultByCode(testCode, userId);
   }
+
 }

@@ -220,10 +220,6 @@ export class AppointmentService {
     };
   }
 
-  async getAllAppointments() {
-    const appointments = await this.prisma.appointment.findMany({ where: { deleted_at: null } });
-    return { appointments, message: 'Lấy danh sách lịch hẹn thành công' };
-  }
 
   async getAppointmentById(appointmentId: string, userId: string, role: Role) {
     const appointment = await this.prisma.appointment.findUnique({
@@ -426,6 +422,23 @@ export class AppointmentService {
       },
       message: 'Lấy kết quả xét nghiệm thành công',
     };
+  }
+
+  
+  async getAllAppointments() {
+    const appointments = await this.prisma.appointment.findMany({
+      where: {
+        deleted_at: null,
+        status:     { not: 'Cancelled' },  // chỉ loại bỏ đã hủy
+      },
+      include: {
+        user:     { select: { user_id: true, full_name: true, email: true } },
+        service:  { select: { service_id: true, name: true, category: true } },
+        schedule: { select: { schedule_id: true, start_time: true, end_time: true } },
+      },
+      orderBy: { start_time: 'asc' },
+    });
+    return { appointments, message: 'Lấy danh sách lịch hẹn thành công' };
   }
 
 }

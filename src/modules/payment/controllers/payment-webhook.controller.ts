@@ -9,19 +9,17 @@ export class PaymentWebhookController {
 
   @Post('callback')
   @HttpCode(200)
-  async handlePayOSCallback(
+  async webhook(
     @Body() payload: any,
     @Headers('x-payos-signature') signature: string,
   ) {
-    this.logger.log('Nhận callback từ PayOS:', JSON.stringify(payload));
-
+    this.logger.log('Nhận callback PayOS:', JSON.stringify(payload));
     try {
       await this.paymentService.processPaymentCallback(payload);
     } catch (err) {
-      // Ghi log lỗi nhưng không throw để luôn trả về 200 cho PayOS
+      // Luôn trả 200 để PayOS không retry
       this.logger.error('Xử lý callback lỗi:', err);
     }
-
     return { received: true };
   }
 }

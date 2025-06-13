@@ -1,25 +1,38 @@
-import { IsString, IsNumber, Min, IsBoolean, IsOptional } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { IsString, IsNumber, IsBoolean, IsOptional, IsEnum, Min } from 'class-validator';
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
+import { ServiceType } from '@prisma/client';
 
 export class UpdateServiceDto {
-  @ApiProperty({ example: 'Gói nâng cao', description: 'Tên dịch vụ', required: false })
+  @ApiPropertyOptional({ example: 'Gói toàn diện', description: 'Tên dịch vụ' })
   @IsString()
   @IsOptional()
   name?: string;
 
-  @ApiProperty({ example: 2000000, description: 'Giá dịch vụ', required: false })
+  @ApiPropertyOptional({ example: 1500000, description: 'Giá dịch vụ (VND)' })
+  @Transform(({ value }) => typeof value === 'string' ? parseFloat(value) : value)
   @IsNumber()
-  @Min(0)
   @IsOptional()
+  @Min(0)
   price?: number;
 
-  @ApiProperty({ example: 'HIV, HPV, Chlamydia, Syphilis', description: 'Mô tả dịch vụ', required: false })
+  @ApiPropertyOptional({ example: 'HIV, HPV, Chlamydia', description: 'Mô tả dịch vụ' })
   @IsString()
   @IsOptional()
   description?: string;
 
-  @ApiProperty({ example: false, description: 'Trạng thái hoạt động', required: false })
+  @ApiPropertyOptional({ example: 'STI', description: 'Danh mục dịch vụ' })
+  @IsString()
+  @IsOptional()
+  category?: string;
+
+  @ApiPropertyOptional({ example: true, description: 'Trạng thái hoạt động' })
   @IsBoolean()
   @IsOptional()
   is_active?: boolean;
+
+  @ApiPropertyOptional({ example: 'Testing', enum: ServiceType, description: 'Loại dịch vụ' })
+  @IsEnum(ServiceType)
+  @IsOptional()
+  type?: ServiceType;
 }

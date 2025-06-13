@@ -1,9 +1,9 @@
-// src/modules/services/services/service.service.ts (tạo mới hoặc thêm phương thức)
 import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { CreateServiceDto } from '../dtos/create-service.dto';
 import { UpdateServiceDto } from '../dtos/update-service.dto';
 import { EmailService } from '../../email/email.service';
+import { ServiceType } from '@prisma/client';
 
 @Injectable()
 export class ServiceService {
@@ -12,10 +12,11 @@ export class ServiceService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly emailService: EmailService,
-  ) { }
+  ) {}
 
   async createService(dto: CreateServiceDto) {
-    const { name, category, is_active = true } = dto;
+    const { name, category, is_active = true, type, price, description } = dto;
+
     const existing = await this.prisma.service.findFirst({
       where: { category, name, deleted_at: null },
     });
@@ -23,7 +24,34 @@ export class ServiceService {
       throw new BadRequestException('Danh mục và tên dịch vụ đã tồn tại');
     }
 
-    return this.prisma.service.create({ data: { ...dto, is_active } });
+    if (type === ServiceType.Consultation) {
+      const relatedTest = await this.prisma.service.findFirst({
+        where: { category, type: ServiceType.Testing, deleted_at: null },
+      });
+      if (!relatedTest) {
+        this.logger.warn(`Dịch vụ tư vấn có category ${category} nhưng không tìm thấy dịch vụ xét nghiệm tương ứng`);
+      }
+    }
+
+    const defaultTestingHours = type === ServiceType.Testing ? {
+      morning: { start: '07:00', end: '11:00' },
+      afternoon: { start: '13:00', end: '17:00' },
+    } : undefined;
+
+    const defaultDailyCapacity = type === ServiceType.Testing ? 20 : undefined;
+
+    return this.prisma.service.create({
+      data: {
+        name,
+        category,
+        price,
+        description,
+        is_active,
+        type,
+        testing_hours: defaultTestingHours,
+        daily_capacity: defaultDailyCapacity,
+      },
+    });
   }
 
   async updateService(serviceId: string, dto: UpdateServiceDto) {
@@ -38,9 +66,40 @@ export class ServiceService {
       throw new BadRequestException('Giá phải là số dương');
     }
 
+    if (dto.name || dto.category) {
+      const existing = await this.prisma.service.findFirst({
+        where: {
+          category: dto.category ?? service.category,
+          name: dto.name ?? service.name,
+          deleted_at: null,
+          NOT: { service_id: serviceId },
+        },
+      });
+      if (existing) {
+        throw new BadRequestException('Danh mục và tên dịch vụ đã tồn tại');
+      }
+    }
+
+    const updateType = dto.type ?? service.type;
+    if (updateType === ServiceType.Consultation && dto.category) {
+      const relatedTest = await this.prisma.service.findFirst({
+        where: { category: dto.category, type: ServiceType.Testing, deleted_at: null },
+      });
+      if (!relatedTest) {
+        this.logger.warn(`Dịch vụ tư vấn có category ${dto.category} nhưng không tìm thấy dịch vụ xét nghiệm tương ứng`);
+      }
+    }
+
     const updatedService = await this.prisma.service.update({
       where: { service_id: serviceId },
-      data: dto,
+      data: {
+        ...dto,
+        testing_hours: updateType === ServiceType.Testing
+          ? service.testing_hours
+          : this.prisma.$type.JsonNull,
+        daily_capacity: updateType === ServiceType.Testing ? service.daily_capacity : undefined,
+        updated_at: new Date(),
+      },
     });
 
     return { service: updatedService, message: 'Cập nhật dịch vụ thành công' };
@@ -79,17 +138,15 @@ export class ServiceService {
   }
 
   async getConsultantsWithSchedules(serviceId: string, date?: string) {
-    // Kiểm tra dịch vụ
     const service = await this.prisma.service.findUnique({
       where: { service_id: serviceId, deleted_at: null },
     });
-    if (!service) {
-      throw new BadRequestException('Dịch vụ không tồn tại hoặc đã bị xóa');
+    if (!service || service.type !== ServiceType.Consultation) {
+      throw new BadRequestException('Dịch vụ không tồn tại hoặc không phải tư vấn');
     }
 
     const where = date ? { start_time: { gte: new Date(date), lte: new Date(date + 'T23:59:59Z') } } : {};
 
-    // Lấy danh sách consultant_id từ bảng schedules
     const schedules = await this.prisma.schedule.findMany({
       where: {
         service_id: serviceId,
@@ -103,7 +160,6 @@ export class ServiceService {
 
     const consultantIds = schedules.map(s => s.consultant_id);
 
-    // Lấy thông tin tư vấn viên dựa trên consultantIds
     const consultants = await this.prisma.consultantProfile.findMany({
       where: {
         consultant_id: { in: consultantIds },

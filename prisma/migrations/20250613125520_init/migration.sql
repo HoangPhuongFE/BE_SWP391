@@ -94,6 +94,9 @@ CREATE TABLE `Service` (
     `price` DECIMAL(10, 2) NOT NULL,
     `category` VARCHAR(50) NULL,
     `is_active` BOOLEAN NOT NULL DEFAULT true,
+    `type` ENUM('Consultation', 'Testing') NOT NULL DEFAULT 'Testing',
+    `testing_hours` JSON NULL,
+    `daily_capacity` INTEGER NULL,
     `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updated_at` DATETIME(3) NOT NULL,
     `deleted_at` DATETIME(3) NULL,
@@ -110,7 +113,7 @@ CREATE TABLE `Appointment` (
     `type` ENUM('Consultation', 'Testing') NOT NULL,
     `start_time` DATETIME(3) NOT NULL,
     `end_time` DATETIME(3) NOT NULL,
-    `status` ENUM('Pending', 'Confirmed', 'Completed', 'Cancelled') NOT NULL DEFAULT 'Pending',
+    `status` ENUM('Pending', 'Confirmed', 'SampleCollected', 'Completed', 'Cancelled') NOT NULL DEFAULT 'Pending',
     `location` VARCHAR(255) NULL,
     `payment_status` ENUM('Pending', 'Paid', 'Failed') NOT NULL DEFAULT 'Pending',
     `is_free_consultation` BOOLEAN NOT NULL DEFAULT false,
@@ -126,6 +129,19 @@ CREATE TABLE `Appointment` (
     INDEX `Appointment_consultant_id_start_time_idx`(`consultant_id`, `start_time`),
     INDEX `Appointment_status_idx`(`status`),
     PRIMARY KEY (`appointment_id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `AppointmentStatusHistory` (
+    `history_id` CHAR(36) NOT NULL,
+    `appointment_id` CHAR(36) NOT NULL,
+    `status` ENUM('Pending', 'Confirmed', 'SampleCollected', 'Completed', 'Cancelled') NOT NULL,
+    `notes` VARCHAR(255) NULL,
+    `changed_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `changed_by` CHAR(36) NOT NULL,
+
+    INDEX `AppointmentStatusHistory_appointment_id_changed_at_idx`(`appointment_id`, `changed_at`),
+    PRIMARY KEY (`history_id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
@@ -146,6 +162,19 @@ CREATE TABLE `TestResult` (
     UNIQUE INDEX `TestResult_appointment_id_key`(`appointment_id`),
     INDEX `TestResult_status_idx`(`status`),
     PRIMARY KEY (`result_id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `TestResultStatusHistory` (
+    `history_id` CHAR(36) NOT NULL,
+    `result_id` CHAR(36) NOT NULL,
+    `status` ENUM('Pending', 'Processing', 'Completed') NOT NULL,
+    `notes` VARCHAR(255) NULL,
+    `changed_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `changed_by` CHAR(36) NOT NULL,
+
+    INDEX `TestResultStatusHistory_result_id_changed_at_idx`(`result_id`, `changed_at`),
+    PRIMARY KEY (`history_id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
@@ -330,10 +359,22 @@ ALTER TABLE `Appointment` ADD CONSTRAINT `Appointment_service_id_fkey` FOREIGN K
 ALTER TABLE `Appointment` ADD CONSTRAINT `Appointment_schedule_id_fkey` FOREIGN KEY (`schedule_id`) REFERENCES `Schedule`(`schedule_id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE `AppointmentStatusHistory` ADD CONSTRAINT `AppointmentStatusHistory_appointment_id_fkey` FOREIGN KEY (`appointment_id`) REFERENCES `Appointment`(`appointment_id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `AppointmentStatusHistory` ADD CONSTRAINT `AppointmentStatusHistory_changed_by_fkey` FOREIGN KEY (`changed_by`) REFERENCES `User`(`user_id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE `TestResult` ADD CONSTRAINT `TestResult_appointment_id_fkey` FOREIGN KEY (`appointment_id`) REFERENCES `Appointment`(`appointment_id`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `TestResult` ADD CONSTRAINT `TestResult_service_id_fkey` FOREIGN KEY (`service_id`) REFERENCES `Service`(`service_id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `TestResultStatusHistory` ADD CONSTRAINT `TestResultStatusHistory_result_id_fkey` FOREIGN KEY (`result_id`) REFERENCES `TestResult`(`result_id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `TestResultStatusHistory` ADD CONSTRAINT `TestResultStatusHistory_changed_by_fkey` FOREIGN KEY (`changed_by`) REFERENCES `User`(`user_id`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `Question` ADD CONSTRAINT `Question_user_id_fkey` FOREIGN KEY (`user_id`) REFERENCES `User`(`user_id`) ON DELETE RESTRICT ON UPDATE CASCADE;

@@ -31,6 +31,7 @@ enum AppointmentType {
 enum AppointmentStatus {
   Pending
   Confirmed
+  SampleCollected
   Completed
   Cancelled
 }
@@ -97,6 +98,11 @@ enum PaymentTransactionStatus {
   Refunded
 }
 
+enum ServiceType {
+  Consultation
+  Testing
+}
+
 // User: Quản lý tài khoản người dùng
 model User {
   user_id        String            @id @default(uuid()) @db.Char(36)
@@ -124,6 +130,8 @@ model User {
   audit_logs     AuditLog[]        // Quan hệ 1-nhiều với AuditLog
   payments       Payment[]         // Quan hệ 1-nhiều với Payment
   menstrual_cycles MenstrualCycle[] // Quan hệ ngược với MenstrualCycle
+  appointment_status_history AppointmentStatusHistory[] // Quan hệ ngược
+  test_result_status_history TestResultStatusHistory[] // Quan hệ ngược
 
   @@index([email])
 }
@@ -199,19 +207,22 @@ model MenstrualCycle {
 
 // Service: Quản lý dịch vụ (xét nghiệm STIs, tư vấn)
 model Service {
-  service_id  String    @id @default(uuid()) @db.Char(36)
-  name        String    @db.VarChar(100)
-  description String?
-  price       Decimal   @db.Decimal(10, 2)
-  category    String?   @db.VarChar(50)
-  is_active   Boolean   @default(true)
-  created_at  DateTime  @default(now())
-  updated_at  DateTime  @updatedAt
-  deleted_at  DateTime?
-  test_results TestResult[] // Quan hệ 1-nhiều với TestResult
-  feedback    Feedback[]    // Quan hệ 1-nhiều với Feedback
-  schedules   Schedule[]    @relation("ServiceSchedule") // Quan hệ ngược với Schedule
-  appointments Appointment[] @relation("ServiceAppointment") // Quan hệ ngược với Appointment
+  service_id     String        @id @default(uuid()) @db.Char(36)
+  name           String        @db.VarChar(100)
+  description    String?
+  price          Decimal       @db.Decimal(10, 2)
+  category       String?       @db.VarChar(50)
+  is_active      Boolean       @default(true)
+  type           ServiceType   @default(Testing)
+  testing_hours  Json?         // { "morning": { "start": "07:00", "end": "11:00" }, "afternoon": { "start": "13:00", "end": "17:00" } }
+  daily_capacity Int?          // Số lượng lịch hẹn tối đa mỗi ngày
+  created_at     DateTime      @default(now())
+  updated_at     DateTime      @updatedAt
+  deleted_at     DateTime?
+  test_results   TestResult[]  // Quan hệ 1-nhiều với TestResult
+  feedback       Feedback[]    // Quan hệ 1-nhiều với Feedback
+  schedules      Schedule[]    @relation("ServiceSchedule")
+  appointments   Appointment[] @relation("ServiceAppointment")
 
   @@index([category, is_active])
 }
@@ -238,31 +249,61 @@ model Appointment {
   payments          Payment[]
   service_id        String?           @db.Char(36)
   service           Service?          @relation(fields: [service_id], references: [service_id], name: "ServiceAppointment")
-  schedule_id       String?           @db.Char(36) @unique // Thêm @unique
+  schedule_id       String?           @db.Char(36) @unique
   schedule          Schedule?         @relation(fields: [schedule_id], references: [schedule_id], name: "AppointmentToSchedule")
+  status_history    AppointmentStatusHistory[] // Quan hệ ngược
 
   @@index([user_id, start_time])
   @@index([consultant_id, start_time])
   @@index([status])
 }
 
+// AppointmentStatusHistory: Lưu lịch sử trạng thái lịch hẹn
+model AppointmentStatusHistory {
+  history_id     String            @id @default(uuid()) @db.Char(36)
+  appointment_id String            @db.Char(36)
+  appointment    Appointment       @relation(fields: [appointment_id], references: [appointment_id])
+  status         AppointmentStatus
+  notes          String?           @db.VarChar(255)
+  changed_at     DateTime          @default(now())
+  changed_by     String            @db.Char(36)
+  changed_by_user User             @relation(fields: [changed_by], references: [user_id])
+
+  @@index([appointment_id, changed_at])
+}
+
 // TestResult: Kết quả xét nghiệm STIs
 model TestResult {
   result_id     String            @id @default(uuid()) @db.Char(36)
-  test_code     String  @unique @db.VarChar(36)
-  appointment_id String            @unique @db.Char(36)
+  test_code     String            @unique @db.VarChar(36)
+  appointment_id String           @unique @db.Char(36)
   appointment   Appointment       @relation(fields: [appointment_id], references: [appointment_id])
   service_id    String            @db.Char(36)
   service       Service           @relation(fields: [service_id], references: [service_id])
   result_data   String
-  is_abnormal   Boolean @default(false)
-  status        TestResultStatus  @default(Pending) // Sử dụng ENUM
+  is_abnormal   Boolean           @default(false)
+  status        TestResultStatus  @default(Pending)
   notes         String?
   created_at    DateTime          @default(now())
   updated_at    DateTime          @updatedAt
   deleted_at    DateTime?
+  status_history TestResultStatusHistory[] // Quan hệ ngược
 
   @@index([status])
+}
+
+// TestResultStatusHistory: Lưu lịch sử trạng thái kết quả xét nghiệm
+model TestResultStatusHistory {
+  history_id    String           @id @default(uuid()) @db.Char(36)
+  result_id     String           @db.Char(36)
+  test_result   TestResult       @relation(fields: [result_id], references: [result_id])
+  status        TestResultStatus
+  notes         String?          @db.VarChar(255)
+  changed_at    DateTime         @default(now())
+  changed_by    String           @db.Char(36)
+  changed_by_user User           @relation(fields: [changed_by], references: [user_id])
+
+  @@index([result_id, changed_at])
 }
 
 // Question: Quản lý hỏi đáp
@@ -276,7 +317,7 @@ model Question {
   content       String
   is_public     Boolean           @default(false)
   is_anonymous  Boolean           @default(false)
-  status        QuestionStatus    @default(Pending) // Sử dụng ENUM
+  status        QuestionStatus    @default(Pending)
   answer        String?
   category      String?           @db.VarChar(50)
   created_at    DateTime          @default(now())
@@ -300,7 +341,7 @@ model Feedback {
   comment       String?
   is_public     Boolean           @default(false)
   is_anonymous  Boolean           @default(false)
-  status        FeedbackStatus    @default(Pending) // Sử dụng ENUM
+  status        FeedbackStatus    @default(Pending)
   response      String?
   created_at    DateTime          @default(now())
   updated_at    DateTime          @updatedAt
@@ -338,7 +379,7 @@ model BlogComment {
   user_id    String            @db.Char(36)
   user       User              @relation(fields: [user_id], references: [user_id])
   content    String
-  status     BlogCommentStatus @default(Pending) // Sử dụng ENUM
+  status     BlogCommentStatus @default(Pending)
   created_at DateTime          @default(now())
   updated_at DateTime          @updatedAt
   deleted_at DateTime?
@@ -354,9 +395,9 @@ model Notification {
   type            NotificationType   // Sử dụng ENUM
   title           String             @db.VarChar(255)
   content         String
-  status          NotificationStatus @default(Pending) // Sử dụng ENUM
+  status          NotificationStatus @default(Pending)
   created_at      DateTime           @default(now())
-  updated_at      DateTime          @updatedAt
+  updated_at      DateTime           @updatedAt
   deleted_at      DateTime?
 
   @@index([user_id, status])
@@ -399,10 +440,10 @@ model Payment {
   user           User                    @relation(fields: [user_id], references: [user_id])
   amount         Decimal                 @db.Decimal(10, 2)
   payment_method PaymentMethod           // Sử dụng ENUM
-  status         PaymentTransactionStatus @default(Pending) // Sử dụng ENUM
+  status         PaymentTransactionStatus @default(Pending)
   refund_amount  Decimal?                @db.Decimal(10, 2)
   refund_reason  String?
-  order_code     Int                     @unique  // Thêm orderCode
+  order_code     Int                     @unique
   created_at     DateTime                @default(now())
   updated_at     DateTime                @updatedAt
 

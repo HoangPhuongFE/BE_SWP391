@@ -1,19 +1,23 @@
-// src/modules/appointments/dtos/create-sti-appointment.dto.ts
-import { IsString, IsDateString, IsOptional } from 'class-validator';
+import { IsString, IsEnum, IsOptional, IsDateString } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+
+export enum TestingSession {
+  Morning = 'morning',
+  Afternoon = 'afternoon',
+}
 
 export class CreateStiAppointmentDto {
   @ApiProperty({ example: 'svc001', description: 'ID dịch vụ xét nghiệm' })
   @IsString()
   serviceId: string;
 
-  @ApiProperty({ example: '2025-06-15T09:00:00Z', description: 'Thời gian bắt đầu' })
+  @ApiProperty({ example: '2025-06-15', description: 'Ngày xét nghiệm (YYYY-MM-DD)' })
   @IsDateString()
-  start_time: string;
+  date: string;
 
-  @ApiProperty({ example: '2025-06-15T11:00:00Z', description: 'Thời gian kết thúc' })
-  @IsDateString()
-  end_time: string;
+  @ApiProperty({ example: 'morning', enum: TestingSession, description: 'Buổi xét nghiệm' })
+  @IsEnum(TestingSession)
+  session: TestingSession;
 
   @ApiPropertyOptional({ example: 'Phòng khám X', description: 'Địa điểm' })
   @IsString()

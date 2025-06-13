@@ -72,53 +72,55 @@ export class PaymentService {
   }
 
   /** Xử lý callback từ PayOS */
-  async processPaymentCallback(payload: any) {
-    this.logger.log('Callback payload:', payload);
+ async processPaymentCallback(payload: any) {
+  this.logger.log('Callback payload:', JSON.stringify(payload));
 
-    const raw = payload.data?.orderCode ?? payload.data?.order_code;
-    const orderCode = Number(raw);
-    if (!orderCode) return;
+  const raw = payload.data?.orderCode ?? payload.data?.order_code;
+  const orderCode = Number(raw);
+  if (!orderCode) return;
 
-    // 1) Tìm payment kèm luôn appointment
-    const payment = await this.prisma.payment.findUnique({
-      where: { order_code: orderCode },
-      include: { appointment: true },
-    });
-    if (!payment) {
-      this.logger.warn(`Không tìm thấy Payment với orderCode=${orderCode}`);
-      return;
-    }
-
-    // 2) Xác định trạng thái mới
-    const tx = payload.data?.status || payload.status || payload.data?.desc;
-    let newStatus: 'Pending' | 'Completed' | 'Failed' = 'Pending';
-    if (tx === 'PAID' || tx === 'Thành công') newStatus = 'Completed';
-    else if (tx === 'CANCELLED')                 newStatus = 'Failed';
-
-    // 3) Cập nhật Payment.status
-    await this.prisma.payment.update({
-      where: { order_code: orderCode },
-      data:  { status: newStatus },
-    });
-
-    // 4) Nếu thành công, cập nhật luôn Appointment và Schedule
-    if (newStatus === 'Completed') {
-      await this.prisma.appointment.update({
-        where: { appointment_id: payment.appointment_id },
-        data: {
-          payment_status: 'Paid',
-          status:         'Confirmed',
-        },
-      });
-      const sid = payment.appointment.schedule_id;
-      if (sid) {
-        await this.prisma.schedule.update({
-          where: { schedule_id: sid },
-          data: { is_booked: true },
-        });
-      }
-    }
-
-    this.logger.log(`Callback xử lý xong orderCode=${orderCode}`);
+  const payment = await this.prisma.payment.findUnique({
+    where: { order_code: orderCode },
+    include: { appointment: true },
+  });
+  if (!payment) {
+    this.logger.warn(`Không tìm thấy Payment orderCode=${orderCode}`);
+    return;
   }
+
+  // MỚI: Xác định success dựa trên code==='00' hoặc success===true
+  const isSuccess = payload.data?.code === '00' || payload.success === true;
+  const isCancelled = payload.data?.status === 'CANCELLED' || payload.data?.desc === 'Cancelled';
+
+  let newStatus: 'Pending' | 'Completed' | 'Failed' = 'Pending';
+  if (isSuccess) newStatus = 'Completed';
+  else if (isCancelled) newStatus = 'Failed';
+
+  // Cập nhật payment
+  await this.prisma.payment.update({
+    where: { order_code: orderCode },
+    data: { status: newStatus },
+  });
+
+  // Nếu thành công, cập nhật thêm appointment & schedule
+  if (newStatus === 'Completed') {
+    await this.prisma.appointment.update({
+      where: { appointment_id: payment.appointment_id },
+      data: {
+        payment_status: 'Paid',
+        status:         'Confirmed',
+      },
+    });
+    const sid = payment.appointment.schedule_id;
+    if (sid) {
+      await this.prisma.schedule.update({
+        where: { schedule_id: sid },
+        data: { is_booked: true },
+      });
+    }
+  }
+
+  this.logger.log(`Callback xử lý xong orderCode=${orderCode}, newStatus=${newStatus}`);
+}
+
 }

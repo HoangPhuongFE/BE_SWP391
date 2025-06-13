@@ -2,11 +2,18 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { Request, Response, NextFunction } from 'express';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.setGlobalPrefix('api');
+  interface CustomRequest extends Request {}
+  interface CustomResponse extends Response {}
 
+  app.use((_req: CustomRequest, res: CustomResponse, next: NextFunction) => {
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    next();
+  });
   //  Cấu hình đầy đủ ValidationPipe
   app.useGlobalPipes(
     new ValidationPipe({

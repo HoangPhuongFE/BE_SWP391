@@ -1,6 +1,6 @@
 import { Controller, Post, Get, Patch, Delete, Body, Param, Query, UseGuards, Req } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody, ApiQuery, ApiParam } from '@nestjs/swagger';
 import { AppointmentService } from '../services/appointment.service';
 import { CreateAppointmentDto } from '../dtos/create-appointment.dto';
 import { CreateStiAppointmentDto } from '../dtos/create-stis-appointment.dto';
@@ -26,13 +26,16 @@ export class AppointmentController {
     return this.appointmentService.createAppointment({ ...dto, userId });
   }
 
-  @Post('sti')
+    @Post('sti')
   @Roles(Role.Customer)
   @UseGuards(AuthGuard('jwt'))
   @ApiOperation({ summary: 'Đặt lịch xét nghiệm STI hoặc xét nghiệm khác' })
   @ApiBearerAuth('access-token')
   @ApiBody({ type: CreateStiAppointmentDto })
-  async createStiAppointment(@Body() dto: CreateStiAppointmentDto, @Req() req) {
+  async createStiAppointment(
+    @Req() req,
+    @Body() dto: CreateStiAppointmentDto,
+  ) {
     const userId = (req.user as any).userId;
     return this.appointmentService.createStiAppointment({ ...dto, userId });
   }
@@ -85,14 +88,18 @@ export class AppointmentController {
     return this.appointmentService.deleteAppointment(appointmentId);
   }
 
-  @Get('/test-results/:resultId')
+  
+  @Get('test-results/:testCode')
   @Roles(Role.Customer)
   @UseGuards(AuthGuard('jwt'))
-  @ApiOperation({ summary: 'Lấy kết quả xét nghiệm' })
+  @ApiOperation({ summary: 'Lấy kết quả xét nghiệm theo mã testCode' })
   @ApiBearerAuth('access-token')
-  @ApiQuery({ name: 'appointmentId', required: true })
-  async getTestResult(@Param('resultId') resultId: string, @Query() dto: GetTestResultDto, @Req() req) {
+  @ApiParam({ name: 'testCode', required: true, description: 'Mã xét nghiệm' })
+  async getTestResultByCode(
+    @Param('testCode') testCode: string,
+    @Req() req
+  ) {
     const userId = (req.user as any).userId;
-    return this.appointmentService.getTestResult(resultId, dto, userId);
+    return this.appointmentService.getTestResultByCode(testCode, userId);
   }
 }

@@ -1,4 +1,3 @@
-// src/modules/payment/controllers/payment.controller.ts
 import { Controller, Post, Body, UseGuards, Get, Param, Req } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody } from '@nestjs/swagger';

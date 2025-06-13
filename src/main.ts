@@ -39,7 +39,7 @@ async function bootstrap() {
   //http://localhost:3001/api
   //http://localhost:3001/api/auth/google
   // --- Cấu hình CORS ---
-  //
+  ////
   app.enableCors({
     //
     origin: [

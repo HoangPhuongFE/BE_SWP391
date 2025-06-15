@@ -7,6 +7,7 @@ import { UpdateAppointmentDto } from '../dtos/update-appointment.dto';
 import { UpdateAppointmentStatusDto } from '../dtos/update-appointment-status.dto';
 import { CreatePaymentDto } from '../../payment/dtos/create-payment.dto';
 import { AppointmentStatus, Role, PaymentMethod, TestResultStatus, ServiceType } from '@prisma/client';
+import { ConfirmAppointmentDto } from '../dtos/confirm-appointment.dto';
 
 @Injectable()
 export class AppointmentService {
@@ -322,97 +323,88 @@ export class AppointmentService {
     };
   }
 
-  async updateAppointmentStatus(
-    appointmentId: string,
-    dto: UpdateAppointmentStatusDto,
-    staffId: string,
-  ) {
-    const { status, notes } = dto;
+ 
+async updateAppointmentStatus(appointmentId: string, dto: UpdateAppointmentStatusDto, staffId: string) {
+  const { status, notes, sampleCollectedDate, testResultDetails, resultDate } = dto;
 
-    const appointment = await this.prisma.appointment.findUnique({
-      where: { appointment_id: appointmentId, deleted_at: null },
-      include: { test_result: true },
-    });
-    if (!appointment) {
-      throw new BadRequestException('Lịch hẹn không tồn tại');
-    }
-    if (appointment.type !== 'Testing') {
-      throw new BadRequestException('Chỉ áp dụng cho lịch hẹn xét nghiệm');
-    }
+  const appointment = await this.prisma.appointment.findUnique({
+    where: { appointment_id: appointmentId, deleted_at: null },
+    include: { test_result: true, user: true, service: true },
+  });
+  if (!appointment) {
+    throw new BadRequestException('Lịch hẹn không tồn tại');
+  }
+  if (appointment.type !== 'Testing') {
+    throw new BadRequestException('Chỉ áp dụng cho lịch hẹn xét nghiệm');
+  }
+  if (status === AppointmentStatus.SampleCollected && appointment.status !== AppointmentStatus.Confirmed) {
+    throw new BadRequestException('Lịch hẹn phải được xác nhận (Confirmed) trước khi lấy mẫu');
+  }
+  if (!this.validateStatusTransition(appointment.status, status)) {
+    throw new BadRequestException(`Không thể chuyển từ ${appointment.status} sang ${status}`);
+  }
 
-    if (!this.validateStatusTransition(appointment.status, status)) {
-      throw new BadRequestException(
-        `Không thể chuyển từ ${appointment.status} sang ${status}`,
-      );
+  let testResultUpdate: any = {};
+  if (status === AppointmentStatus.SampleCollected) {
+    if (!appointment.test_result) {
+      throw new BadRequestException('Không tìm thấy kết quả xét nghiệm');
     }
-
-    let testResultUpdate: any = {};
-    if (status === AppointmentStatus.SampleCollected) {
-      if (!appointment.test_result) {
-        throw new BadRequestException('Không tìm thấy kết quả xét nghiệm');
-      }
-      if (!this.validateTestResultStatusTransition(appointment.test_result.status, TestResultStatus.Processing)) {
-        throw new BadRequestException(
-          `Không thể chuyển TestResult từ ${appointment.test_result.status} sang Processing`,
-        );
-      }
-      testResultUpdate = { status: TestResultStatus.Processing, updated_at: new Date() };
-    } else if (status === AppointmentStatus.Completed) {
-      if (!appointment.test_result) {
-        throw new BadRequestException('Không tìm thấy kết quả xét nghiệm');
-      }
-      if (!this.validateTestResultStatusTransition(appointment.test_result.status, TestResultStatus.Completed)) {
-        throw new BadRequestException(
-          `Không thể chuyển TestResult từ ${appointment.test_result.status} sang Completed`,
-        );
-      }
-      const isAbnormal = notes?.includes('Positive') || notes?.includes('Abnormal') || notes?.includes('High');
-      testResultUpdate = {
-        status: TestResultStatus.Completed,
-        result_data: isAbnormal ? 'Positive' : 'Negative',
-        is_abnormal: isAbnormal,
-        notes,
-        updated_at: new Date(),
-      };
+    if (!this.validateTestResultStatusTransition(appointment.test_result.status, TestResultStatus.Processing)) {
+      throw new BadRequestException(`Không thể chuyển TestResult từ ${appointment.test_result.status} sang Processing`);
     }
+    testResultUpdate = { status: TestResultStatus.Processing, updated_at: new Date() };
+  } else if (status === AppointmentStatus.Completed) {
+    if (!appointment.test_result) {
+      throw new BadRequestException('Không tìm thấy kết quả xét nghiệm');
+    }
+    if (!this.validateTestResultStatusTransition(appointment.test_result.status, TestResultStatus.Completed)) {
+      throw new BadRequestException(`Không thể chuyển TestResult từ ${appointment.test_result.status} sang Completed`);
+    }
+    const isAbnormal = testResultDetails ? Object.values(testResultDetails).some(v => v.toLowerCase().includes('positive')) : false;
+    testResultUpdate = {
+      status: TestResultStatus.Completed,
+      result_data: testResultDetails ? JSON.stringify(testResultDetails) : notes || 'Negative',
+      is_abnormal: isAbnormal,
+      notes,
+      updated_at: new Date(),
+    };
+  }
 
-    const [updatedAppointment] = await this.prisma.$transaction([
-      this.prisma.appointment.update({
-        where: { appointment_id: appointmentId },
-        data: { status, updated_at: new Date() },
+  const [updatedAppointment] = await this.prisma.$transaction([
+    this.prisma.appointment.update({
+      where: { appointment_id: appointmentId },
+      data: { status, updated_at: new Date() },
+    }),
+    ...(testResultUpdate.status ? [
+      this.prisma.testResult.update({
+        where: { result_id: appointment.test_result!.result_id },
+        data: testResultUpdate,
       }),
-      ...(testResultUpdate.status
-        ? [
-            this.prisma.testResult.update({
-              where: { result_id: appointment.test_result!.result_id },
-              data: testResultUpdate,
-            }),
-            this.prisma.testResultStatusHistory.create({
-              data: {
-                result_id: appointment.test_result!.result_id,
-                status: testResultUpdate.status,
-                notes: notes || `Cập nhật trạng thái TestResult sang ${testResultUpdate.status}`,
-                changed_by: staffId,
-              },
-            }),
-          ]
-        : []),
-      this.prisma.appointmentStatusHistory.create({
+      this.prisma.testResultStatusHistory.create({
         data: {
-          appointment_id: appointmentId,
-          status,
-          notes: notes || `Cập nhật trạng thái sang ${status}`,
+          result_id: appointment.test_result!.result_id,
+          status: testResultUpdate.status,
+          notes: notes || `Cập nhật trạng thái TestResult sang ${testResultUpdate.status}`,
           changed_by: staffId,
         },
       }),
-    ]);
+    ] : []),
+    this.prisma.appointmentStatusHistory.create({
+      data: {
+        appointment_id: appointmentId,
+        status,
+        notes: notes || `Cập nhật trạng thái sang ${status}`,
+        changed_by: staffId,
+      },
+    }),
+  ]);
 
-    this.logger.log(`Cập nhật trạng thái lịch hẹn ${appointmentId} sang ${status} bởi staff ${staffId}`);
-    return {
-      appointment: updatedAppointment,
-      message: 'Cập nhật trạng thái lịch hẹn thành công',
-    };
-  }
+  this.logger.log(`Cập nhật trạng thái lịch hẹn ${appointmentId} sang ${status} bởi staff ${staffId}`);
+  return {
+    appointment: updatedAppointment,
+    message: 'Cập nhật trạng thái lịch hẹn thành công',
+  };
+}
 
   async updateAppointment(appointmentId: string, dto: UpdateAppointmentDto) {
     const appointment = await this.prisma.appointment.findUnique({
@@ -497,71 +489,97 @@ export class AppointmentService {
     return { appointment: updatedAppointment, message: 'Xóa lịch hẹn thành công' };
   }
 
-  async getTestResult(testCode: string, userId: string) {
-    const testResult = await this.prisma.testResult.findUnique({
-      where: { test_code: testCode },
-      include: {
-        appointment: {
-          select: {
-            appointment_id: true,
-            user_id: true,
-            type: true,
-            start_time: true,
-            end_time: true,
-            status: true,
-            service: { select: { service_id: true, name: true } },
-          },
+ async getTestResult(testCode: string, userId: string) {
+  const testResult = await this.prisma.testResult.findUnique({
+    where: { test_code: testCode },
+    include: {
+      appointment: {
+        select: {
+          appointment_id: true,
+          user_id: true,
+          type: true,
+          start_time: true,
+          end_time: true,
+          status: true,
+          service: { select: { service_id: true, name: true, category: true } },
         },
-        service: { select: { service_id: true, name: true, category: true } },
       },
-    });
+      service: { select: { service_id: true, name: true, category: true } },
+    },
+  });
 
-    if (!testResult) {
-      throw new BadRequestException('Mã xét nghiệm không hợp lệ');
-    }
-    if (testResult.appointment.user_id !== userId) {
-      throw new BadRequestException('Bạn không có quyền xem kết quả này');
-    }
-
-    const appointmentStatusHistory = await this.prisma.appointmentStatusHistory.findMany({
-      where: { appointment_id: testResult.appointment_id },
-      orderBy: { changed_at: 'asc' },
-      select: {
-        status: true,
-        notes: true,
-        changed_at: true,
-        changed_by_user: { select: { full_name: true } },
-      },
-    });
-
-    const testResultStatusHistory = await this.prisma.testResultStatusHistory.findMany({
-      where: { result_id: testResult.result_id },
-      orderBy: { changed_at: 'asc' },
-      select: {
-        status: true,
-        notes: true,
-        changed_at: true,
-        changed_by_user: { select: { full_name: true } },
-      },
-    });
-
-    this.logger.log(`Khách hàng ${userId} xem kết quả xét nghiệm ${testCode}`);
-    return {
-      appointment: testResult.appointment,
-      testResult: {
-        result_id: testResult.result_id,
-        test_code: testResult.test_code,
-        result_data: testResult.result_data,
-        status: testResult.status,
-        is_abnormal: testResult.is_abnormal,
-        notes: testResult.notes,
-        updated_at: testResult.updated_at,
-      },
-      appointmentStatusHistory,
-      testResultStatusHistory,
-      message: 'Lấy kết quả xét nghiệm thành công',
-    };
+  if (!testResult) {
+    throw new BadRequestException('Mã xét nghiệm không hợp lệ');
   }
+  if (testResult.appointment.user_id !== userId) {
+    throw new BadRequestException('Bạn không có quyền xem kết quả này');
+  }
+
+  const appointmentStatusHistory = await this.prisma.appointmentStatusHistory.findMany({
+    where: { appointment_id: testResult.appointment_id },
+    orderBy: { changed_at: 'asc' },
+    select: {
+      status: true,
+      notes: true,
+      changed_at: true,
+      changed_by_user: { select: { full_name: true } },
+    },
+  });
+
+  const testResultStatusHistory = await this.prisma.testResultStatusHistory.findMany({
+    where: { result_id: testResult.result_id },
+    orderBy: { changed_at: 'asc' },
+    select: {
+      status: true,
+      notes: true,
+      changed_at: true,
+      changed_by_user: { select: { full_name: true } },
+    },
+  });
+
+  let statusDisplay: string;
+  switch (testResult.status) {
+    case TestResultStatus.Pending:
+      statusDisplay = 'Chưa xử lý';
+      break;
+    case TestResultStatus.Processing:
+      statusDisplay = testResult.appointment.status === AppointmentStatus.SampleCollected ? 'Lấy mẫu' : 'Đang xét nghiệm';
+      break;
+    case TestResultStatus.Completed:
+      statusDisplay = 'Có kết quả';
+      break;
+    default:
+      statusDisplay = 'Không xác định';
+  }
+
+  const user = await this.prisma.user.findUnique({
+    where: { user_id: userId },
+    select: { full_name: true, email: true, phone_number: true },
+  });
+
+  this.logger.log(`Khách hàng ${userId} xem kết quả xét nghiệm ${testCode}`);
+  return {
+    appointment: testResult.appointment,
+    testResult: {
+      result_id: testResult.result_id,
+      test_code: testResult.test_code,
+      result_data: testResult.result_data,
+      status: statusDisplay,
+      is_abnormal: testResult.is_abnormal,
+      notes: testResult.notes,
+      updated_at: testResult.updated_at,
+      service: testResult.service,
+    },
+    appointmentStatusHistory,
+    testResultStatusHistory,
+    basic_info: {
+      full_name: user?.full_name,
+      email: user?.email,
+      phone_number: user?.phone_number,
+    },
+    message: 'Lấy kết quả xét nghiệm thành công',
+  };
+}
 
   async getAppointmentById(appointmentId: string, userId: string, role: Role) {
     const appointment = await this.prisma.appointment.findUnique({
@@ -615,4 +633,44 @@ export class AppointmentService {
     });
     return { appointments, message: 'Lấy danh sách lịch hẹn thành công' };
   }
+
+  async confirmAppointment(appointmentId: string, dto: ConfirmAppointmentDto, staffId: string) {
+  const appointment = await this.prisma.appointment.findUnique({
+    where: { appointment_id: appointmentId, deleted_at: null },
+    include: { test_result: true, schedule: true },
+  });
+  if (!appointment) {
+    throw new BadRequestException('Lịch hẹn không tồn tại');
+  }
+  if (appointment.status !== AppointmentStatus.Pending) {
+    throw new BadRequestException('Lịch hẹn không ở trạng thái Pending');
+  }
+  if (appointment.payment_status !== 'Paid' && !appointment.is_free_consultation) {
+    throw new BadRequestException('Lịch hẹn chưa được thanh toán');
+  }
+  if (appointment.type === 'Consultation' && !appointment.schedule) {
+    throw new BadRequestException('Lịch hẹn tư vấn phải có lịch trống hợp lệ');
+  }
+
+  const updatedAppointment = await this.prisma.$transaction([
+    this.prisma.appointment.update({
+      where: { appointment_id: appointmentId },
+      data: { status: AppointmentStatus.Confirmed, updated_at: new Date() },
+    }),
+    this.prisma.appointmentStatusHistory.create({
+      data: {
+        appointment_id: appointmentId,
+        status: AppointmentStatus.Confirmed,
+        notes: dto.notes || 'Xác nhận lịch hẹn',
+        changed_by: staffId,
+      },
+    }),
+  ]);
+
+  this.logger.log(`Xác nhận lịch hẹn ${appointmentId} bởi staff ${staffId}`);
+  return {
+    appointment: updatedAppointment[0],
+    message: 'Xác nhận đơn thành công',
+  };
+}
 }

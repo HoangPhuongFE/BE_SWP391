@@ -1,14 +1,33 @@
-import { IsEnum, IsString, IsOptional } from 'class-validator';
+
+// src/modules/appointments/dtos/update-appointment-status.dto.ts
+import { IsEnum, IsString, IsOptional, IsDateString } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { AppointmentStatus } from '@prisma/client';
 
 export class UpdateAppointmentStatusDto {
-  @ApiProperty({ example: 'Completed', enum: AppointmentStatus })
+  @ApiProperty({ example: 'SampleCollected', enum: AppointmentStatus })
   @IsEnum(AppointmentStatus)
   status: AppointmentStatus;
 
-  @ApiPropertyOptional({ example: 'Xét nghiệm thành công', description: 'Ghi chú' })
+  @ApiPropertyOptional({ example: 'Mẫu máu đã lấy', description: 'Ghi chú' })
   @IsString()
   @IsOptional()
   notes?: string;
+
+  @ApiPropertyOptional({ example: '2025-06-15T09:00:00Z', description: 'Ngày lấy mẫu (cho SampleCollected)' })
+  @IsDateString()
+  @IsOptional()
+  sampleCollectedDate?: string;
+
+  @ApiPropertyOptional({
+    example: { HIV: 'Negative' },
+    description: 'Kết quả xét nghiệm chi tiết (cho Completed)',
+  })
+  @IsOptional()
+  testResultDetails?: Record<string, string>;
+
+  @ApiPropertyOptional({ example: '2025-06-16T15:00:00Z', description: 'Ngày có kết quả (cho Completed)' })
+  @IsDateString()
+  @IsOptional()
+  resultDate?: string;
 }

@@ -9,6 +9,7 @@ import { UpdateAppointmentStatusDto } from '../dtos/update-appointment-status.dt
 import { GetTestResultDto } from '../dtos/get-test-result.dto';
 import { Roles } from '../../auth/decorators/roles.decorator';
 import { Role } from '@prisma/client';
+import { ConfirmAppointmentDto } from '../dtos/confirm-appointment.dto';
 
 @ApiTags('Appointments')
 @Controller('appointments')
@@ -104,4 +105,21 @@ export class AppointmentController {
     const userId = (req.user as any).userId;
     return this.appointmentService.getTestResult(testCode, userId);
   }
+
+ @Patch(':appointmentId/confirm')
+@Roles(Role.Staff, Role.Manager)
+@UseGuards(AuthGuard('jwt'))
+@ApiOperation({ summary: 'Staff xác nhận đơn lịch hẹn (Pending → Confirmed)' })
+@ApiBearerAuth('access-token')
+@ApiParam({ name: 'appointmentId', description: 'ID lịch hẹn' })
+@ApiBody({ type: ConfirmAppointmentDto })
+async confirmAppointment(
+  @Param('appointmentId') appointmentId: string,
+  @Body() dto: ConfirmAppointmentDto,
+  @Req() req,
+) {
+  const staffId = req.user.userId;
+  return this.appointmentService.confirmAppointment(appointmentId, dto, staffId);
+}
+
 }

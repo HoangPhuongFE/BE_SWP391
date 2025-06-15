@@ -42,7 +42,9 @@ async function bootstrap() {
    SwaggerModule.setup('docs', app, document);
     
   //https://learnup.work/api
+  //https://learnup.work/docs (Swagger UI)
   //https://learnup.work/api/auth/google
+
   //http://localhost:3001/docs (Swagger UI) chạy được API 
   //http://localhost:3001/api (API gốc)
   //http://localhost:3001/api/auth/google

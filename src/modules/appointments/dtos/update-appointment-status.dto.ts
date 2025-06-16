@@ -1,5 +1,3 @@
-
-// src/modules/appointments/dtos/update-appointment-status.dto.ts
 import { IsEnum, IsString, IsOptional, IsDateString } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { AppointmentStatus } from '@prisma/client';

@@ -10,7 +10,8 @@ import { AppointmentModule } from './modules/appointments/appointment.module';
 import { PaymentModule } from './modules/payment/payment.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { EmailModule } from './modules/email/email.module';
-
+import { BlogModule } from './modules/blog/blog.module';
+import { BlogCommentModule } from './modules/blog-comment/blog-comment.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
@@ -23,6 +24,9 @@ import { EmailModule } from './modules/email/email.module';
     AppointmentModule,
     PaymentModule,
     EmailModule,
+    BlogModule,
+    BlogCommentModule,
+    
   ],
 })
 export class AppModule {}

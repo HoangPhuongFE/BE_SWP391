@@ -105,31 +105,31 @@ enum ServiceType {
 
 // User: Quản lý tài khoản người dùng
 model User {
-  user_id        String            @id @default(uuid()) @db.Char(36)
-  email          String            @unique @db.VarChar(255)
-  password_hash  String            @db.VarChar(255)
-  role           Role              @default(Customer)
-  full_name      String?           @db.VarChar(100)
-  phone_number   String?           @db.VarChar(20)
-  address        String?
-  is_verified    Boolean           @default(false)
-  is_active      Boolean           @default(true)
-  created_at     DateTime          @default(now())
-  updated_at     DateTime          @updatedAt
-  deleted_at     DateTime?
-  customer       CustomerProfile?  // Quan hệ 1-1 với CustomerProfile
-  consultant     ConsultantProfile? // Quan hệ 1-1 với ConsultantProfile
-  tokens         Token[]           // Quan hệ 1-nhiều với Token
-  appointments   Appointment[]     // Quan hệ 1-nhiều với Appointment
-  questions      Question[]        // Quan hệ 1-nhiều với Question
-  feedback       Feedback[]        // Quan hệ 1-nhiều với Feedback
-  blog_posts     BlogPost[]        // Quan hệ 1-nhiều với BlogPost
-  blog_comments  BlogComment[]     // Quan hệ 1-nhiều với BlogComment
-  notifications  Notification[]    // Quan hệ 1-nhiều với Notification
-  reports        Report[]          // Quan hệ 1-nhiều với Report
-  audit_logs     AuditLog[]        // Quan hệ 1-nhiều với AuditLog
-  payments       Payment[]         // Quan hệ 1-nhiều với Payment
-  menstrual_cycles MenstrualCycle[] // Quan hệ ngược với MenstrualCycle
+  user_id                    String                     @id @default(uuid()) @db.Char(36)
+  email                      String                     @unique @db.VarChar(255)
+  password_hash              String                     @db.VarChar(255)
+  role                       Role                       @default(Customer)
+  full_name                  String?                    @db.VarChar(100)
+  phone_number               String?                    @db.VarChar(20)
+  address                    String?
+  is_verified                Boolean                    @default(false)
+  is_active                  Boolean                    @default(true)
+  created_at                 DateTime                   @default(now())
+  updated_at                 DateTime                   @updatedAt
+  deleted_at                 DateTime?
+  customer                   CustomerProfile? // Quan hệ 1-1 với CustomerProfile
+  consultant                 ConsultantProfile? // Quan hệ 1-1 với ConsultantProfile
+  tokens                     Token[] // Quan hệ 1-nhiều với Token
+  appointments               Appointment[] // Quan hệ 1-nhiều với Appointment
+  questions                  Question[] // Quan hệ 1-nhiều với Question
+  feedback                   Feedback[] // Quan hệ 1-nhiều với Feedback
+  blog_posts                 BlogPost[] // Quan hệ 1-nhiều với BlogPost
+  blog_comments              BlogComment[] // Quan hệ 1-nhiều với BlogComment
+  notifications              Notification[] // Quan hệ 1-nhiều với Notification
+  reports                    Report[] // Quan hệ 1-nhiều với Report
+  audit_logs                 AuditLog[] // Quan hệ 1-nhiều với AuditLog
+  payments                   Payment[] // Quan hệ 1-nhiều với Payment
+  menstrual_cycles           MenstrualCycle[] // Quan hệ ngược với MenstrualCycle
   appointment_status_history AppointmentStatusHistory[] // Quan hệ ngược
   test_result_status_history TestResultStatusHistory[] // Quan hệ ngược
 
@@ -138,69 +138,69 @@ model User {
 
 // Token: Quản lý refresh token cho xác thực
 model Token {
-  token_id          String   @id @default(uuid()) @db.Char(36)
-  user_id           String   @db.Char(36)
-  user              User     @relation(fields: [user_id], references: [user_id])
-  refresh_token_hash String   @db.Text
-  expires_at        DateTime
-  is_revoked        Boolean  @default(false)
-  created_at        DateTime @default(now())
-  updated_at        DateTime @updatedAt
-  deleted_at        DateTime?
+  token_id           String    @id @default(uuid()) @db.Char(36)
+  user_id            String    @db.Char(36)
+  user               User      @relation(fields: [user_id], references: [user_id])
+  refresh_token_hash String    @db.Text
+  expires_at         DateTime
+  is_revoked         Boolean   @default(false)
+  created_at         DateTime  @default(now())
+  updated_at         DateTime  @updatedAt
+  deleted_at         DateTime?
 
   @@index([user_id, is_revoked])
 }
 
 // CustomerProfile: Hồ sơ khách hàng
 model CustomerProfile {
-  profile_id       String   @id @default(uuid()) @db.Char(36)
-  user_id          String   @unique @db.Char(36)
-  user             User     @relation(fields: [user_id], references: [user_id])
+  profile_id       String    @id @default(uuid()) @db.Char(36)
+  user_id          String    @unique @db.Char(36)
+  user             User      @relation(fields: [user_id], references: [user_id])
   date_of_birth    DateTime?
-  gender           Gender?  // Sử dụng ENUM
+  gender           Gender? // Sử dụng ENUM
   medical_history  String?
   privacy_settings Json?
-  created_at       DateTime @default(now())
-  updated_at       DateTime @updatedAt
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @updatedAt
   deleted_at       DateTime?
 }
 
 // ConsultantProfile: Hồ sơ tư vấn viên
 model ConsultantProfile {
-  consultant_id String    @id @default(uuid()) @db.Char(36)
-  user_id       String    @unique @db.Char(36)
-  user          User      @relation(fields: [user_id], references: [user_id])
+  consultant_id  String        @id @default(uuid()) @db.Char(36)
+  user_id        String        @unique @db.Char(36)
+  user           User          @relation(fields: [user_id], references: [user_id])
   qualifications String?
-  experience    String?
-  specialization String?   @db.VarChar(100)
-  is_verified   Boolean   @default(false)
+  experience     String?
+  specialization String?       @db.VarChar(100)
+  is_verified    Boolean       @default(false)
   average_rating Float?
-  created_at    DateTime  @default(now())
-  updated_at    DateTime  @updatedAt
-  deleted_at    DateTime?
-  appointments  Appointment[] // Quan hệ 1-nhiều với Appointment
-  questions     Question[]    // Quan hệ 1-nhiều với Question
-  feedback      Feedback[]    // Quan hệ 1-nhiều với Feedback
-  schedules     Schedule[]    @relation("ConsultantSchedule") // Quan hệ ngược với Schedule
+  created_at     DateTime      @default(now())
+  updated_at     DateTime      @updatedAt
+  deleted_at     DateTime?
+  appointments   Appointment[] // Quan hệ 1-nhiều với Appointment
+  questions      Question[] // Quan hệ 1-nhiều với Question
+  feedback       Feedback[] // Quan hệ 1-nhiều với Feedback
+  schedules      Schedule[]    @relation("ConsultantSchedule") // Quan hệ ngược với Schedule
 
   @@index([is_verified])
 }
 
 // MenstrualCycle: Theo dõi chu kỳ kinh nguyệt
 model MenstrualCycle {
-  cycle_id             String   @id @default(uuid()) @db.Char(36)
-  user_id             String   @db.Char(36)
-  user                User     @relation(fields: [user_id], references: [user_id])
-  start_date          DateTime
-  cycle_length        Int?
-  period_length       Int?
-  symptoms            String?
-  notes               String?
-  ovulation_date      DateTime?
+  cycle_id              String    @id @default(uuid()) @db.Char(36)
+  user_id               String    @db.Char(36)
+  user                  User      @relation(fields: [user_id], references: [user_id])
+  start_date            DateTime
+  cycle_length          Int?
+  period_length         Int?
+  symptoms              String?
+  notes                 String?
+  ovulation_date        DateTime?
   pregnancy_probability Float?
-  created_at          DateTime @default(now())
-  updated_at          DateTime @updatedAt
-  deleted_at          DateTime?
+  created_at            DateTime  @default(now())
+  updated_at            DateTime  @updatedAt
+  deleted_at            DateTime?
 
   @@index([user_id, start_date])
 }
@@ -214,13 +214,13 @@ model Service {
   category       String?       @db.VarChar(50)
   is_active      Boolean       @default(true)
   type           ServiceType   @default(Testing)
-  testing_hours  Json?         // { "morning": { "start": "07:00", "end": "11:00" }, "afternoon": { "start": "13:00", "end": "17:00" } }
-  daily_capacity Int?          // Số lượng lịch hẹn tối đa mỗi ngày
+  testing_hours  Json? // { "morning": { "start": "07:00", "end": "11:00" }, "afternoon": { "start": "13:00", "end": "17:00" } }
+  daily_capacity Int? // Số lượng lịch hẹn tối đa mỗi ngày
   created_at     DateTime      @default(now())
   updated_at     DateTime      @updatedAt
   deleted_at     DateTime?
-  test_results   TestResult[]  // Quan hệ 1-nhiều với TestResult
-  feedback       Feedback[]    // Quan hệ 1-nhiều với Feedback
+  test_results   TestResult[] // Quan hệ 1-nhiều với TestResult
+  feedback       Feedback[] // Quan hệ 1-nhiều với Feedback
   schedules      Schedule[]    @relation("ServiceSchedule")
   appointments   Appointment[] @relation("ServiceAppointment")
 
@@ -229,29 +229,29 @@ model Service {
 
 // Appointment: Quản lý lịch hẹn (tư vấn, xét nghiệm)
 model Appointment {
-  appointment_id    String            @id @default(uuid()) @db.Char(36)
-  user_id           String            @db.Char(36)
-  user              User              @relation(fields: [user_id], references: [user_id])
-  consultant_id     String?           @db.Char(36)
-  consultant        ConsultantProfile? @relation(fields: [consultant_id], references: [consultant_id])
-  type              AppointmentType
-  start_time        DateTime
-  end_time          DateTime
-  status            AppointmentStatus @default(Pending)
-  location          String?           @db.VarChar(255)
-  payment_status    PaymentStatus     @default(Pending)
-  is_free_consultation Boolean @default(false)
-  consultation_notes String?
-  created_at        DateTime          @default(now())
-  updated_at        DateTime          @updatedAt
-  deleted_at        DateTime?
-  test_result       TestResult?
-  payments          Payment[]
-  service_id        String?           @db.Char(36)
-  service           Service?          @relation(fields: [service_id], references: [service_id], name: "ServiceAppointment")
-  schedule_id       String?           @db.Char(36) @unique
-  schedule          Schedule?         @relation(fields: [schedule_id], references: [schedule_id], name: "AppointmentToSchedule")
-  status_history    AppointmentStatusHistory[] // Quan hệ ngược
+  appointment_id       String                     @id @default(uuid()) @db.Char(36)
+  user_id              String                     @db.Char(36)
+  user                 User                       @relation(fields: [user_id], references: [user_id])
+  consultant_id        String?                    @db.Char(36)
+  consultant           ConsultantProfile?         @relation(fields: [consultant_id], references: [consultant_id])
+  type                 AppointmentType
+  start_time           DateTime
+  end_time             DateTime
+  status               AppointmentStatus          @default(Pending)
+  location             String?                    @db.VarChar(255)
+  payment_status       PaymentStatus              @default(Pending)
+  is_free_consultation Boolean                    @default(false)
+  consultation_notes   String?
+  created_at           DateTime                   @default(now())
+  updated_at           DateTime                   @updatedAt
+  deleted_at           DateTime?
+  test_result          TestResult?
+  payments             Payment[]
+  service_id           String?                    @db.Char(36)
+  service              Service?                   @relation(fields: [service_id], references: [service_id], name: "ServiceAppointment")
+  schedule_id          String?                    @unique @db.Char(36)
+  schedule             Schedule?                  @relation(fields: [schedule_id], references: [schedule_id], name: "AppointmentToSchedule")
+  status_history       AppointmentStatusHistory[] // Quan hệ ngược
 
   @@index([user_id, start_time])
   @@index([consultant_id, start_time])
@@ -260,33 +260,33 @@ model Appointment {
 
 // AppointmentStatusHistory: Lưu lịch sử trạng thái lịch hẹn
 model AppointmentStatusHistory {
-  history_id     String            @id @default(uuid()) @db.Char(36)
-  appointment_id String            @db.Char(36)
-  appointment    Appointment       @relation(fields: [appointment_id], references: [appointment_id])
-  status         AppointmentStatus
-  notes          String?           @db.VarChar(255)
-  changed_at     DateTime          @default(now())
-  changed_by     String            @db.Char(36)
-  changed_by_user User             @relation(fields: [changed_by], references: [user_id])
+  history_id      String            @id @default(uuid()) @db.Char(36)
+  appointment_id  String            @db.Char(36)
+  appointment     Appointment       @relation(fields: [appointment_id], references: [appointment_id])
+  status          AppointmentStatus
+  notes           String?           @db.VarChar(255)
+  changed_at      DateTime          @default(now())
+  changed_by      String            @db.Char(36)
+  changed_by_user User              @relation(fields: [changed_by], references: [user_id])
 
   @@index([appointment_id, changed_at])
 }
 
 // TestResult: Kết quả xét nghiệm STIs
 model TestResult {
-  result_id     String            @id @default(uuid()) @db.Char(36)
-  test_code     String            @unique @db.VarChar(36)
-  appointment_id String           @unique @db.Char(36)
-  appointment   Appointment       @relation(fields: [appointment_id], references: [appointment_id])
-  service_id    String            @db.Char(36)
-  service       Service           @relation(fields: [service_id], references: [service_id])
-  result_data   String
-  is_abnormal   Boolean           @default(false)
-  status        TestResultStatus  @default(Pending)
-  notes         String?
-  created_at    DateTime          @default(now())
-  updated_at    DateTime          @updatedAt
-  deleted_at    DateTime?
+  result_id      String                    @id @default(uuid()) @db.Char(36)
+  test_code      String                    @unique @db.VarChar(36)
+  appointment_id String                    @unique @db.Char(36)
+  appointment    Appointment               @relation(fields: [appointment_id], references: [appointment_id])
+  service_id     String                    @db.Char(36)
+  service        Service                   @relation(fields: [service_id], references: [service_id])
+  result_data    String
+  is_abnormal    Boolean                   @default(false)
+  status         TestResultStatus          @default(Pending)
+  notes          String?
+  created_at     DateTime                  @default(now())
+  updated_at     DateTime                  @updatedAt
+  deleted_at     DateTime?
   status_history TestResultStatusHistory[] // Quan hệ ngược
 
   @@index([status])
@@ -294,57 +294,54 @@ model TestResult {
 
 // TestResultStatusHistory: Lưu lịch sử trạng thái kết quả xét nghiệm
 model TestResultStatusHistory {
-  history_id    String           @id @default(uuid()) @db.Char(36)
-  result_id     String           @db.Char(36)
-  test_result   TestResult       @relation(fields: [result_id], references: [result_id])
-  status        TestResultStatus
-  notes         String?          @db.VarChar(255)
-  changed_at    DateTime         @default(now())
-  changed_by    String           @db.Char(36)
-  changed_by_user User           @relation(fields: [changed_by], references: [user_id])
+  history_id      String           @id @default(uuid()) @db.Char(36)
+  result_id       String           @db.Char(36)
+  test_result     TestResult       @relation(fields: [result_id], references: [result_id])
+  status          TestResultStatus
+  notes           String?          @db.VarChar(255)
+  changed_at      DateTime         @default(now())
+  changed_by      String           @db.Char(36)
+  changed_by_user User             @relation(fields: [changed_by], references: [user_id])
 
   @@index([result_id, changed_at])
 }
 
 // Question: Quản lý hỏi đáp
 model Question {
-  question_id   String            @id @default(uuid()) @db.Char(36)
-  user_id       String            @db.Char(36)
-  user          User              @relation(fields: [user_id], references: [user_id])
-  consultant_id String?           @db.Char(36)
+  question_id   String             @id @default(uuid()) @db.Char(36)
+  user_id       String             @db.Char(36)
+  user          User               @relation(fields: [user_id], references: [user_id])
+  consultant_id String?            @db.Char(36)
   consultant    ConsultantProfile? @relation(fields: [consultant_id], references: [consultant_id])
-  title         String            @db.VarChar(255)
-  content       String
-  is_public     Boolean           @default(false)
-  is_anonymous  Boolean           @default(false)
-  status        QuestionStatus    @default(Pending)
-  answer        String?
-  category      String?           @db.VarChar(50)
-  created_at    DateTime          @default(now())
-  updated_at    DateTime          @updatedAt
+  title         String             @db.VarChar(255)
+  content       String             @db.Text
+  is_public     Boolean            @default(false)
+  is_anonymous  Boolean            @default(false)
+  status        QuestionStatus     @default(Pending)
+  answer        String?            @db.Text
+  category      String?            @db.VarChar(50)
+  created_at    DateTime           @default(now())
+  updated_at    DateTime           @updatedAt
   deleted_at    DateTime?
-
-  @@index([user_id, status])
-  @@index([consultant_id, status])
 }
 
 // Feedback: Quản lý đánh giá và phản hồi
 model Feedback {
-  feedback_id   String            @id @default(uuid()) @db.Char(36)
-  user_id       String            @db.Char(36)
-  user          User              @relation(fields: [user_id], references: [user_id])
-  consultant_id String?           @db.Char(36)
+  feedback_id   String             @id @default(uuid()) @db.Char(36)
+  user_id       String             @db.Char(36)
+  user          User               @relation(fields: [user_id], references: [user_id])
+  consultant_id String?            @db.Char(36)
   consultant    ConsultantProfile? @relation(fields: [consultant_id], references: [consultant_id])
-  service_id    String?           @db.Char(36)
-  service       Service?          @relation(fields: [service_id], references: [service_id])
+  service_id    String?            @db.Char(36)
+  service       Service?           @relation(fields: [service_id], references: [service_id])
   rating        Int
-  comment       String?
-  is_public     Boolean           @default(false)
-  is_anonymous  Boolean           @default(false)
-  status        FeedbackStatus    @default(Pending)
+  comment       String?            @db.Text
+  is_public     Boolean            @default(false)
+  is_anonymous  Boolean            @default(false)
+  status        FeedbackStatus     @default(Pending)
   response      String?
-  created_at    DateTime          @default(now())
-  updated_at    DateTime          @updatedAt
+  created_at    DateTime           @default(now())
+  updated_at    DateTime           @updatedAt
   deleted_at    DateTime?
 
   @@index([user_id, status])
@@ -353,38 +350,41 @@ model Feedback {
 
 // BlogPost: Quản lý bài viết blog
 model BlogPost {
-  post_id        String       @id @default(uuid()) @db.Char(36)
-  title          String       @db.VarChar(255)
-  content        String
-  category       String?      @db.VarChar(50)
-  author_id      String       @db.Char(36)
-  author         User         @relation(fields: [author_id], references: [user_id])
-  is_published   Boolean      @default(false)
-  views_count    Int          @default(0)
-  meta_title     String?      @db.VarChar(255)
+  post_id          String        @id @default(uuid()) @db.Char(36)
+  title            String        @db.VarChar(255)
+  content          String        @db.Text
+  category         String?       @db.VarChar(50)
+  author_id        String        @db.Char(36)
+  author           User          @relation(fields: [author_id], references: [user_id])
+  is_published     Boolean       @default(false)
+  views_count      Int           @default(0)
+  meta_title       String?       @db.VarChar(255)
   meta_description String?
-  created_at     DateTime     @default(now())
-  updated_at     DateTime     @updatedAt
-  deleted_at     DateTime?
-  comments       BlogComment[] // Quan hệ 1-nhiều với BlogComment
+  created_at       DateTime      @default(now())
+  updated_at       DateTime      @updatedAt
+  deleted_at       DateTime?
+  comments         BlogComment[] @relation("BlogPostComments") // Quan hệ 1-nhiều với BlogComment, đặt tên quan hệ
 
   @@index([category, is_published])
 }
 
-// BlogComment: Quản lý bình luận bài viết blog
 model BlogComment {
   comment_id String            @id @default(uuid()) @db.Char(36)
   post_id    String            @db.Char(36)
-  post       BlogPost          @relation(fields: [post_id], references: [post_id])
   user_id    String            @db.Char(36)
+  parent_id  String?           @db.Char(36) // Thêm trường cho bình luận cha, null nếu là bình luận gốc
   user       User              @relation(fields: [user_id], references: [user_id])
-  content    String
+  parent     BlogComment?      @relation("CommentReplies", fields: [parent_id], references: [comment_id])
+  replies    BlogComment[]     @relation("CommentReplies") // Quan hệ ngược cho các phản hồi
+  post       BlogPost          @relation("BlogPostComments", fields: [post_id], references: [post_id]) // Quan hệ ngược với BlogPost
+  content    String            @db.Text
   status     BlogCommentStatus @default(Pending)
   created_at DateTime          @default(now())
   updated_at DateTime          @updatedAt
   deleted_at DateTime?
 
   @@index([post_id, status])
+  @@index([parent_id])
 }
 
 // Notification: Quản lý thông báo
@@ -392,9 +392,9 @@ model Notification {
   notification_id String             @id @default(uuid()) @db.Char(36)
   user_id         String             @db.Char(36)
   user            User               @relation(fields: [user_id], references: [user_id])
-  type            NotificationType   // Sử dụng ENUM
+  type            NotificationType // Sử dụng ENUM
   title           String             @db.VarChar(255)
-  content         String
+  content         String             @db.Text
   status          NotificationStatus @default(Pending)
   created_at      DateTime           @default(now())
   updated_at      DateTime           @updatedAt
@@ -405,15 +405,15 @@ model Notification {
 
 // Report: Quản lý báo cáo
 model Report {
-  report_id  String       @id @default(uuid()) @db.Char(36)
-  type       ReportType   // Sử dụng ENUM
+  report_id  String     @id @default(uuid()) @db.Char(36)
+  type       ReportType // Sử dụng ENUM
   data       Json
   start_date DateTime
   end_date   DateTime
-  created_by String       @db.Char(36)
-  creator    User         @relation(fields: [created_by], references: [user_id])
-  created_at DateTime     @default(now())
-  updated_at DateTime     @updatedAt
+  created_by String     @db.Char(36)
+  creator    User       @relation(fields: [created_by], references: [user_id])
+  created_at DateTime   @default(now())
+  updated_at DateTime   @updatedAt
   deleted_at DateTime?
 
   @@index([type, start_date])
@@ -433,19 +433,19 @@ model AuditLog {
 
 // Payment: Quản lý lịch sử thanh toán và hoàn trả
 model Payment {
-  payment_id     String                  @id @default(uuid()) @db.Char(36)
-  appointment_id String                  @db.Char(36)
-  appointment    Appointment             @relation(fields: [appointment_id], references: [appointment_id])
-  user_id        String                  @db.Char(36)
-  user           User                    @relation(fields: [user_id], references: [user_id])
-  amount         Decimal                 @db.Decimal(10, 2)
-  payment_method PaymentMethod           // Sử dụng ENUM
+  payment_id     String                   @id @default(uuid()) @db.Char(36)
+  appointment_id String                   @db.Char(36)
+  appointment    Appointment              @relation(fields: [appointment_id], references: [appointment_id])
+  user_id        String                   @db.Char(36)
+  user           User                     @relation(fields: [user_id], references: [user_id])
+  amount         Decimal                  @db.Decimal(10, 2)
+  payment_method PaymentMethod // Sử dụng ENUM
   status         PaymentTransactionStatus @default(Pending)
-  refund_amount  Decimal?                @db.Decimal(10, 2)
+  refund_amount  Decimal?                 @db.Decimal(10, 2)
   refund_reason  String?
-  order_code     Int                     @unique
-  created_at     DateTime                @default(now())
-  updated_at     DateTime                @updatedAt
+  order_code     Int                      @unique
+  created_at     DateTime                 @default(now())
+  updated_at     DateTime                 @updatedAt
 
   @@index([appointment_id, status])
   @@index([user_id, status])
@@ -453,17 +453,17 @@ model Payment {
 
 // Schedule: Quản lý lịch trống của Consultant
 model Schedule {
-  schedule_id   String    @id @default(uuid()) @db.Char(36)
-  consultant_id String    @db.Char(36)
+  schedule_id   String            @id @default(uuid()) @db.Char(36)
+  consultant_id String            @db.Char(36)
   consultant    ConsultantProfile @relation(fields: [consultant_id], references: [consultant_id], name: "ConsultantSchedule")
-  service_id    String    @db.Char(36)
-  service       Service   @relation(fields: [service_id], references: [service_id], name: "ServiceSchedule")
+  service_id    String            @db.Char(36)
+  service       Service           @relation(fields: [service_id], references: [service_id], name: "ServiceSchedule")
   start_time    DateTime
   end_time      DateTime
-  is_booked     Boolean   @default(false)
-  created_at    DateTime  @default(now())
+  is_booked     Boolean           @default(false)
+  created_at    DateTime          @default(now())
   deleted_at    DateTime?
-  appointment   Appointment? @relation(name: "AppointmentToSchedule")
+  appointment   Appointment?      @relation(name: "AppointmentToSchedule")
 
   @@index([consultant_id, start_time])
   @@index([service_id])

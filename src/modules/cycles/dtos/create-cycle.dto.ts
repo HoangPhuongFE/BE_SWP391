@@ -1,4 +1,3 @@
-// src/modules/cycles/dtos/create-cycle.dto.ts
 import { IsDateString, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 

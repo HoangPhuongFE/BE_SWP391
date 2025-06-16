@@ -1,4 +1,3 @@
-// src/modules/payment/dtos/create-payment.dto.ts
 import { IsInt, IsString, IsOptional, IsUrl } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { PaymentMethod } from '@prisma/client';

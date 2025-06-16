@@ -183,18 +183,16 @@ CREATE TABLE `Question` (
     `user_id` CHAR(36) NOT NULL,
     `consultant_id` CHAR(36) NULL,
     `title` VARCHAR(255) NOT NULL,
-    `content` VARCHAR(191) NOT NULL,
+    `content` TEXT NOT NULL,
     `is_public` BOOLEAN NOT NULL DEFAULT false,
     `is_anonymous` BOOLEAN NOT NULL DEFAULT false,
     `status` ENUM('Pending', 'Answered', 'Rejected') NOT NULL DEFAULT 'Pending',
-    `answer` VARCHAR(191) NULL,
+    `answer` TEXT NULL,
     `category` VARCHAR(50) NULL,
     `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updated_at` DATETIME(3) NOT NULL,
     `deleted_at` DATETIME(3) NULL,
 
-    INDEX `Question_user_id_status_idx`(`user_id`, `status`),
-    INDEX `Question_consultant_id_status_idx`(`consultant_id`, `status`),
     PRIMARY KEY (`question_id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -205,7 +203,7 @@ CREATE TABLE `Feedback` (
     `consultant_id` CHAR(36) NULL,
     `service_id` CHAR(36) NULL,
     `rating` INTEGER NOT NULL,
-    `comment` VARCHAR(191) NULL,
+    `comment` TEXT NULL,
     `is_public` BOOLEAN NOT NULL DEFAULT false,
     `is_anonymous` BOOLEAN NOT NULL DEFAULT false,
     `status` ENUM('Pending', 'Approved', 'Rejected') NOT NULL DEFAULT 'Pending',
@@ -223,7 +221,7 @@ CREATE TABLE `Feedback` (
 CREATE TABLE `BlogPost` (
     `post_id` CHAR(36) NOT NULL,
     `title` VARCHAR(255) NOT NULL,
-    `content` VARCHAR(191) NOT NULL,
+    `content` TEXT NOT NULL,
     `category` VARCHAR(50) NULL,
     `author_id` CHAR(36) NOT NULL,
     `is_published` BOOLEAN NOT NULL DEFAULT false,
@@ -243,13 +241,15 @@ CREATE TABLE `BlogComment` (
     `comment_id` CHAR(36) NOT NULL,
     `post_id` CHAR(36) NOT NULL,
     `user_id` CHAR(36) NOT NULL,
-    `content` VARCHAR(191) NOT NULL,
+    `parent_id` CHAR(36) NULL,
+    `content` TEXT NOT NULL,
     `status` ENUM('Pending', 'Approved', 'Rejected') NOT NULL DEFAULT 'Pending',
     `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updated_at` DATETIME(3) NOT NULL,
     `deleted_at` DATETIME(3) NULL,
 
     INDEX `BlogComment_post_id_status_idx`(`post_id`, `status`),
+    INDEX `BlogComment_parent_id_idx`(`parent_id`),
     PRIMARY KEY (`comment_id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -259,7 +259,7 @@ CREATE TABLE `Notification` (
     `user_id` CHAR(36) NOT NULL,
     `type` ENUM('Email', 'Push', 'SMS') NOT NULL,
     `title` VARCHAR(255) NOT NULL,
-    `content` VARCHAR(191) NOT NULL,
+    `content` TEXT NOT NULL,
     `status` ENUM('Pending', 'Sent', 'Failed') NOT NULL DEFAULT 'Pending',
     `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updated_at` DATETIME(3) NOT NULL,
@@ -395,10 +395,13 @@ ALTER TABLE `Feedback` ADD CONSTRAINT `Feedback_service_id_fkey` FOREIGN KEY (`s
 ALTER TABLE `BlogPost` ADD CONSTRAINT `BlogPost_author_id_fkey` FOREIGN KEY (`author_id`) REFERENCES `User`(`user_id`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE `BlogComment` ADD CONSTRAINT `BlogComment_post_id_fkey` FOREIGN KEY (`post_id`) REFERENCES `BlogPost`(`post_id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE `BlogComment` ADD CONSTRAINT `BlogComment_user_id_fkey` FOREIGN KEY (`user_id`) REFERENCES `User`(`user_id`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE `BlogComment` ADD CONSTRAINT `BlogComment_user_id_fkey` FOREIGN KEY (`user_id`) REFERENCES `User`(`user_id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE `BlogComment` ADD CONSTRAINT `BlogComment_parent_id_fkey` FOREIGN KEY (`parent_id`) REFERENCES `BlogComment`(`comment_id`) ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `BlogComment` ADD CONSTRAINT `BlogComment_post_id_fkey` FOREIGN KEY (`post_id`) REFERENCES `BlogPost`(`post_id`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `Notification` ADD CONSTRAINT `Notification_user_id_fkey` FOREIGN KEY (`user_id`) REFERENCES `User`(`user_id`) ON DELETE RESTRICT ON UPDATE CASCADE;

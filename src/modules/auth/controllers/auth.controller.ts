@@ -1,4 +1,3 @@
-// src/modules/auth/controllers/auth.controller.ts
 import {
   Controller,
   Get,
@@ -22,9 +21,8 @@ import {
   ApiOperation,
   ApiBody,
   ApiResponse,
-  ApiBearerAuth
+  ApiBearerAuth,
 } from '@nestjs/swagger';
-
 @ApiTags('Auth (quản lý người dùng)')
 @Controller('auth')
 export class AuthController {
@@ -36,9 +34,7 @@ export class AuthController {
   @ApiOperation({ summary: 'Chuyển hướng người dùng đến màn hình đồng ý Google OAuth' })
   @UseGuards(AuthGuard('google'))
   googleLogin() {
-    // Passport sẽ tự redirect
   }
-
   @Get('google/redirect')
   @ApiOperation({ summary: 'Google OAuth callback endpoint' })
   @UseGuards(AuthGuard('google'))

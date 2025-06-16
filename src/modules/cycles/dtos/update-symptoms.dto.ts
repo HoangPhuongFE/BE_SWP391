@@ -1,4 +1,3 @@
-// src/modules/cycles/dtos/update-symptoms.dto.ts
 import { IsString, IsOptional } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 

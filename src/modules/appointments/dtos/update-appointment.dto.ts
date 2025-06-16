@@ -1,5 +1,3 @@
-
-// src/modules/appointments/dtos/update-appointment.dto.ts
 import { IsString, IsOptional, IsDateString } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 

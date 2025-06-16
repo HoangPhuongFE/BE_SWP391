@@ -1,4 +1,3 @@
-// src/modules/cycles/services/cycle.service.ts
 import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { SetupCycleDto } from '../dtos/setup-cycle.dto';

@@ -1,4 +1,3 @@
-// src/modules/cycles/controllers/cycle.controller.ts
 import { Controller, Post, Get, Patch, Body, Req, Query, UseGuards, Param } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody, ApiQuery } from '@nestjs/swagger';

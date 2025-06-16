@@ -20,7 +20,7 @@ import { RolesGuard } from './guards/roles.guard';
       inject: [ConfigService],
       useFactory: (cfg: ConfigService) => ({
         secret: cfg.get<string>('JWT_SECRET'),
-        signOptions: { expiresIn: '2h' }, // Đồng bộ với AuthService
+        signOptions: { expiresIn: '2h' }, 
       }),
     }),
     PrismaModule,

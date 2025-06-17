@@ -97,6 +97,8 @@ CREATE TABLE `Service` (
     `type` ENUM('Consultation', 'Testing') NOT NULL DEFAULT 'Testing',
     `testing_hours` JSON NULL,
     `daily_capacity` INTEGER NULL,
+    `return_address` VARCHAR(255) NULL,
+    `return_phone` VARCHAR(20) NULL,
     `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updated_at` DATETIME(3) NOT NULL,
     `deleted_at` DATETIME(3) NULL,
@@ -123,12 +125,33 @@ CREATE TABLE `Appointment` (
     `deleted_at` DATETIME(3) NULL,
     `service_id` CHAR(36) NULL,
     `schedule_id` CHAR(36) NULL,
+    `related_appointment_id` CHAR(36) NULL,
+    `free_consultation_valid_until` DATETIME(3) NULL,
+    `payment_refunded` BOOLEAN NOT NULL DEFAULT false,
+    `sample_collected_date` DATETIME(3) NULL,
 
     UNIQUE INDEX `Appointment_schedule_id_key`(`schedule_id`),
-    INDEX `Appointment_user_id_start_time_idx`(`user_id`, `start_time`),
-    INDEX `Appointment_consultant_id_start_time_idx`(`consultant_id`, `start_time`),
-    INDEX `Appointment_status_idx`(`status`),
     PRIMARY KEY (`appointment_id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `ShippingInfo` (
+    `id` CHAR(36) NOT NULL,
+    `appointment_id` VARCHAR(191) NOT NULL,
+    `provider` VARCHAR(191) NOT NULL,
+    `provider_order_code` VARCHAR(191) NULL,
+    `shipping_status` ENUM('Pending', 'Shipped', 'DeliveredToCustomer', 'PickupRequested', 'SampleInTransit', 'SampleCollected', 'ReturnedToLab', 'Failed') NOT NULL,
+    `contact_name` VARCHAR(191) NOT NULL,
+    `contact_phone` VARCHAR(191) NOT NULL,
+    `shipping_address` VARCHAR(191) NOT NULL,
+    `province` VARCHAR(191) NOT NULL,
+    `district` VARCHAR(191) NOT NULL,
+    `ward` VARCHAR(191) NOT NULL,
+    `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updated_at` DATETIME(3) NOT NULL,
+
+    UNIQUE INDEX `ShippingInfo_appointment_id_key`(`appointment_id`),
+    PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
@@ -157,10 +180,12 @@ CREATE TABLE `TestResult` (
     `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updated_at` DATETIME(3) NOT NULL,
     `deleted_at` DATETIME(3) NULL,
+    `viewed_at` DATETIME(3) NULL,
 
     UNIQUE INDEX `TestResult_test_code_key`(`test_code`),
     UNIQUE INDEX `TestResult_appointment_id_key`(`appointment_id`),
     INDEX `TestResult_status_idx`(`status`),
+    INDEX `TestResult_viewed_at_idx`(`viewed_at`),
     PRIMARY KEY (`result_id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -211,6 +236,7 @@ CREATE TABLE `Feedback` (
     `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updated_at` DATETIME(3) NOT NULL,
     `deleted_at` DATETIME(3) NULL,
+    `appointment_id` CHAR(36) NULL,
 
     INDEX `Feedback_user_id_status_idx`(`user_id`, `status`),
     INDEX `Feedback_consultant_id_status_idx`(`consultant_id`, `status`),
@@ -248,8 +274,7 @@ CREATE TABLE `BlogComment` (
     `updated_at` DATETIME(3) NOT NULL,
     `deleted_at` DATETIME(3) NULL,
 
-    INDEX `BlogComment_post_id_status_idx`(`post_id`, `status`),
-    INDEX `BlogComment_parent_id_idx`(`parent_id`),
+    INDEX `BlogComment_post_id_idx`(`post_id`),
     PRIMARY KEY (`comment_id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -328,6 +353,7 @@ CREATE TABLE `Schedule` (
     `is_booked` BOOLEAN NOT NULL DEFAULT false,
     `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `deleted_at` DATETIME(3) NULL,
+    `max_appointments_per_day` INTEGER NULL DEFAULT 5,
 
     INDEX `Schedule_consultant_id_start_time_idx`(`consultant_id`, `start_time`),
     INDEX `Schedule_service_id_idx`(`service_id`),
@@ -357,6 +383,9 @@ ALTER TABLE `Appointment` ADD CONSTRAINT `Appointment_service_id_fkey` FOREIGN K
 
 -- AddForeignKey
 ALTER TABLE `Appointment` ADD CONSTRAINT `Appointment_schedule_id_fkey` FOREIGN KEY (`schedule_id`) REFERENCES `Schedule`(`schedule_id`) ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `ShippingInfo` ADD CONSTRAINT `ShippingInfo_appointment_id_fkey` FOREIGN KEY (`appointment_id`) REFERENCES `Appointment`(`appointment_id`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `AppointmentStatusHistory` ADD CONSTRAINT `AppointmentStatusHistory_appointment_id_fkey` FOREIGN KEY (`appointment_id`) REFERENCES `Appointment`(`appointment_id`) ON DELETE RESTRICT ON UPDATE CASCADE;

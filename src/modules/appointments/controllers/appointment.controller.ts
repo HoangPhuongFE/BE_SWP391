@@ -6,10 +6,10 @@ import { CreateAppointmentDto } from '../dtos/create-appointment.dto';
 import { CreateStiAppointmentDto } from '../dtos/create-stis-appointment.dto';
 import { UpdateAppointmentDto } from '../dtos/update-appointment.dto';
 import { UpdateAppointmentStatusDto } from '../dtos/update-appointment-status.dto';
-import { GetTestResultDto } from '../dtos/get-test-result.dto';
 import { Roles } from '../../auth/decorators/roles.decorator';
 import { Role } from '@prisma/client';
 import { ConfirmAppointmentDto } from '../dtos/confirm-appointment.dto';
+import { CreateFeedbackDto } from '../dtos/create-feedback.dto';
 
 @ApiTags('Appointments')
 @Controller('appointments')
@@ -121,5 +121,32 @@ async confirmAppointment(
   const staffId = req.user.userId;
   return this.appointmentService.confirmAppointment(appointmentId, dto, staffId);
 }
+
+
+@Patch(':appointmentId/feedback')
+@Roles(Role.Customer)
+@UseGuards(AuthGuard('jwt'))
+@ApiOperation({ summary: 'Gửi feedback và rating cho buổi tư vấn' })
+@ApiParam({ name: 'appointmentId', description: 'ID lịch hẹn tư vấn' })
+@ApiBody({ type: CreateFeedbackDto })
+async submitFeedback(@Param('appointmentId') appointmentId: string, @Body() dto: CreateFeedbackDto, @Req() req) {
+  const userId = (req.user as any).userId;
+  const result = await this.appointmentService.submitFeedback(appointmentId, dto, userId);
+  return result;
+}
+
+
+@Get('validate-related/:appointmentId')
+@Roles(Role.Customer)
+@UseGuards(AuthGuard('jwt'))
+@ApiOperation({ summary: 'Kiểm tra điều kiện miễn phí tư vấn dựa trên ID xét nghiệm' })
+async validateRelatedAppointment(@Param('appointmentId') appointmentId: string, @Req() req) {
+  const userId = (req.user as any).userId;
+  const result = await this.appointmentService.validateRelatedAppointment(appointmentId, userId);
+  return result;
+}
+
+
+
 
 }

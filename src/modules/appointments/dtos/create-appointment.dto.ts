@@ -24,4 +24,9 @@ export class CreateAppointmentDto {
   @IsString()
   @IsOptional()
   location?: string;
+
+  @ApiPropertyOptional({ example: '123e4567-e89b-12d3-a456-426614174000', description: 'ID xét nghiệm liên quan để miễn phí' })
+  @IsString()
+  @IsOptional()
+  related_appointment_id?: string;
 }

@@ -28,4 +28,6 @@ export class CreateStiAppointmentDto {
   @IsString()
   @IsOptional()
   category?: string;
+
+  
 }

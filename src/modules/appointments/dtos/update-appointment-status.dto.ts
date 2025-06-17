@@ -12,19 +12,19 @@ export class UpdateAppointmentStatusDto {
   @IsOptional()
   notes?: string;
 
-  @ApiPropertyOptional({ example: '2025-06-15T09:00:00Z', description: 'Ngày lấy mẫu (cho SampleCollected)' })
+  @ApiPropertyOptional({ example: '2025-06-15T09:00:00Z', description: 'Ngày lấy mẫu (bắt buộc khi status là SampleCollected)' })
   @IsDateString()
   @IsOptional()
   sampleCollectedDate?: string;
 
   @ApiPropertyOptional({
     example: { HIV: 'Negative' },
-    description: 'Kết quả xét nghiệm chi tiết (cho Completed)',
+    description: 'Kết quả xét nghiệm chi tiết (bắt buộc khi status là Completed)',
   })
   @IsOptional()
   testResultDetails?: Record<string, string>;
 
-  @ApiPropertyOptional({ example: '2025-06-16T15:00:00Z', description: 'Ngày có kết quả (cho Completed)' })
+  @ApiPropertyOptional({ example: '2025-06-16T15:00:00Z', description: 'Ngày có kết quả (bắt buộc khi status là Completed)' })
   @IsDateString()
   @IsOptional()
   resultDate?: string;

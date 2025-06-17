@@ -347,6 +347,7 @@ async function main() {
         data: {
           user_id: customer.user_id,
           start_date: faker.date.past(),
+          is_predicted: faker.datatype.boolean(),
           cycle_length: faker.number.int({ min: 25, max: 35 }),
           period_length: faker.number.int({ min: 3, max: 7 }),
           symptoms: faker.lorem.words(5).slice(0, 240),

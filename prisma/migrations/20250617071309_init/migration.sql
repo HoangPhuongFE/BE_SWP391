@@ -72,6 +72,7 @@ CREATE TABLE `MenstrualCycle` (
     `cycle_id` CHAR(36) NOT NULL,
     `user_id` CHAR(36) NOT NULL,
     `start_date` DATETIME(3) NOT NULL,
+    `is_predicted` BOOLEAN NULL,
     `cycle_length` INTEGER NULL,
     `period_length` INTEGER NULL,
     `symptoms` VARCHAR(191) NULL,

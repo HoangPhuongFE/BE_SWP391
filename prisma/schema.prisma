@@ -229,6 +229,8 @@ model Service {
   daily_capacity Int?          // Số lượng lịch hẹn tối đa mỗi ngày
   return_address String?      @db.VarChar(255) // Địa chỉ nhận mẫu
   return_phone   String?      @db.VarChar(20)  // Số điện thoại liên hệ
+   is_home_test   Boolean?      @default(false) 
+   is_flexible_location Boolean? @default(false)
   created_at     DateTime      @default(now())
   updated_at     DateTime      @updatedAt
   deleted_at     DateTime?

@@ -3,6 +3,7 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { CreateScheduleDto } from '../dtos/create-schedule.dto';
 import { UpdateScheduleDto } from '../dtos/update-schedule.dto';
 import { ServiceType } from '@prisma/client';
+import { BatchCreateScheduleDto } from '../dtos/batch-create-schedule.dto';
 
 @Injectable()
 export class ScheduleService {
@@ -198,4 +199,73 @@ export class ScheduleService {
       where: { consultant_id: consultantId },
     });
   }
+
+  async batchCreateSchedules(consultantId: string, dto: BatchCreateScheduleDto) {
+  const { start_time, end_time, duration_minutes, service_id } = dto;
+  const start = new Date(start_time);
+  const end = new Date(end_time);
+  const now = new Date();
+
+  if (isNaN(start.getTime()) || isNaN(end.getTime()) || start >= end) {
+    throw new BadRequestException('Thời gian không hợp lệ');
+  }
+
+  if (start <= now) {
+    throw new BadRequestException('Thời gian bắt đầu phải trong tương lai');
+  }
+
+  const service = await this.prisma.service.findUnique({
+    where: { service_id, deleted_at: null },
+  });
+  if (!service || service.type !== ServiceType.Consultation) {
+    throw new BadRequestException('Dịch vụ không tồn tại hoặc không phải tư vấn');
+  }
+
+  const createdSchedules: Array<Awaited<ReturnType<typeof this.prisma.schedule.create>>> = [];
+  let slotStart = new Date(start);
+
+  while (slotStart < end) {
+    const slotEnd = new Date(slotStart.getTime() + duration_minutes * 60 * 1000);
+
+    if (slotEnd > end) break;
+
+    const isOverlapping = await this.prisma.$transaction([
+      this.prisma.appointment.findFirst({
+        where: {
+          consultant_id: consultantId,
+          start_time: { lte: slotEnd },
+          end_time: { gte: slotStart },
+          status: { not: 'Cancelled' },
+        },
+      }),
+      this.prisma.schedule.findFirst({
+        where: {
+          consultant_id: consultantId,
+          start_time: { lte: slotEnd },
+          end_time: { gte: slotStart },
+          deleted_at: null,
+        },
+      }),
+    ]);
+
+    const [overlappingAppointment, overlappingSchedule] = isOverlapping;
+
+    if (!overlappingAppointment && !overlappingSchedule) {
+      const schedule = await this.prisma.schedule.create({
+        data: {
+          consultant_id: consultantId,
+          service_id,
+          start_time: slotStart,
+          end_time: slotEnd,
+        },
+      });
+      createdSchedules.push(schedule);
+    }
+
+    slotStart = slotEnd;
+  }
+
+  return { created: createdSchedules.length, schedules: createdSchedules };
+}
+
 }

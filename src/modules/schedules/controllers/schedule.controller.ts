@@ -7,11 +7,12 @@ import { UpdateScheduleDto } from '../dtos/update-schedule.dto';
 import { Roles } from '../../auth/decorators/roles.decorator';
 import { Role } from '@prisma/client';
 import { BadRequestException } from '@nestjs/common';
+import { BatchCreateScheduleDto } from '../dtos/batch-create-schedule.dto';
 
 @ApiTags('Schedules')
 @Controller('schedules')
 export class ScheduleController {
-  constructor(private readonly scheduleService: ScheduleService) {}
+  constructor(private readonly scheduleService: ScheduleService) { }
 
   @Post()
   @Roles(Role.Consultant)
@@ -50,12 +51,12 @@ export class ScheduleController {
   async getScheduleById(@Param('scheduleId') scheduleId: string, @Req() req) {
     const userId = req.user.userId;
     const role = req.user.role;
-    
+
     const schedule = await this.scheduleService.getScheduleWithConsultant(scheduleId);
     if (!schedule) {
       throw new BadRequestException('Lịch không tồn tại');
     }
-    
+
     if (role === Role.Consultant) {
       const consultant = await this.scheduleService.getConsultantProfile(userId);
       if (!consultant || schedule.consultant_id !== consultant.consultant_id) {
@@ -64,7 +65,7 @@ export class ScheduleController {
     } else if (role !== Role.Manager) {
       throw new BadRequestException('Không có quyền xem lịch này');
     }
-    
+
     return this.scheduleService.getScheduleById(scheduleId);
   }
 
@@ -120,4 +121,21 @@ export class ScheduleController {
     }
     return this.scheduleService.deleteSchedule(scheduleId);
   }
+
+
+@Post('batch')
+@Roles(Role.Consultant)
+@UseGuards(AuthGuard('jwt'))
+@ApiOperation({ summary: 'Tạo nhiều lịch trống liên tiếp' })
+@ApiBearerAuth('access-token')
+@ApiBody({ type: BatchCreateScheduleDto })
+async batchCreate(@Body() dto: BatchCreateScheduleDto, @Req() req) {
+  const userId = req.user.userId;
+  const consultant = await this.scheduleService.getConsultantProfile(userId);
+  if (!consultant) {
+    throw new BadRequestException('Không tìm thấy hồ sơ Consultant');
+  }
+  return this.scheduleService.batchCreateSchedules(consultant.consultant_id, dto);
+}
+
 }

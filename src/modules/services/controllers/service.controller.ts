@@ -44,7 +44,6 @@ export class ServiceController {
   }
 
   @Get()
-  @UseGuards(AuthGuard('jwt'))
   @ApiOperation({ summary: 'Xem danh sách tất cả dịch vụ' })
   @ApiBearerAuth('access-token')
   @ApiQuery({ name: 'category', required: false, description: 'Lọc theo danh mục' })
@@ -54,7 +53,6 @@ export class ServiceController {
   }
 
   @Get(':serviceId')
-  @UseGuards(AuthGuard('jwt'))
   @ApiOperation({ summary: 'Xem chi tiết dịch vụ theo ID' })
   @ApiBearerAuth('access-token')
   @ApiParam({ name: 'serviceId', description: 'ID dịch vụ' })
@@ -63,7 +61,7 @@ export class ServiceController {
   }
 
   @Get(':serviceId/consultants')
-  @Roles(Role.Customer, Role.Staff, Role.Manager)
+  @Roles(Role.Manager, Role.Staff)
   @UseGuards(AuthGuard('jwt'))
   @ApiOperation({ summary: 'Xem danh sách Consultant và lịch trống theo dịch vụ' })
   @ApiBearerAuth('access-token')

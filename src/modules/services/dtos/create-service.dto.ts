@@ -32,4 +32,25 @@ export class CreateServiceDto {
   @ApiProperty({ example: 'Testing', enum: ServiceType, description: 'Loại dịch vụ' })
   @IsEnum(ServiceType)
   type: ServiceType;
+
+  @ApiPropertyOptional({ example: true, description: 'Dịch vụ tại nhà?' })
+  @IsOptional()
+  @IsBoolean()
+  is_home_test?: boolean;
+
+  @ApiPropertyOptional({ example: '123 Nguyễn Văn A, Q1, HCM', description: 'Địa chỉ nhận mẫu từ khách' })
+  @IsString()
+  @IsOptional()
+  return_address?: string;
+
+  @ApiPropertyOptional({ example: '0909123456', description: 'SĐT nhận mẫu từ khách' })
+  @IsString()
+  @IsOptional()
+  return_phone?: string;
+
+  @ApiPropertyOptional({ example: true, description: 'Cho phép chọn địa điểm linh hoạt (tại nhà hoặc tại viện)' })
+  @IsBoolean()
+  @IsOptional()
+  is_flexible_location?: boolean;
+
 }

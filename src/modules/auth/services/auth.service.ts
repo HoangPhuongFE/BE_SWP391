@@ -1,16 +1,17 @@
-import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '@/prisma/prisma.service';
 import { UpdateCustomerProfileDto } from '../dtos/update-customer-profile.dto';
 import { UpdateConsultantProfileDto } from '../dtos/update-consultant-profile.dto';
 import * as bcrypt from 'bcrypt';
+import { Role } from '@prisma/client';
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly jwtService: JwtService,
     private readonly prisma: PrismaService,
-  ) {}
+  ) { }
 
   async handleOAuthLogin(userData: {
     provider: string;
@@ -86,7 +87,7 @@ export class AuthService {
       fullName: user.full_name,
       isVerified: user.is_verified,
       isActive: user.is_active,
-      
+
     };
 
     const accessToken = this.jwtService.sign(payload, { expiresIn: '2h' });
@@ -107,36 +108,36 @@ export class AuthService {
   }
 
   async register(email: string, password: string, fullName: string) {
-  const exists = await this.prisma.user.findUnique({ where: { email } });
-  if (exists) {
-    throw new BadRequestException('Email already in use');
+    const exists = await this.prisma.user.findUnique({ where: { email } });
+    if (exists) {
+      throw new BadRequestException('Email already in use');
+    }
+
+    const hash = await bcrypt.hash(password, 10);
+
+    const user = await this.prisma.user.create({
+      data: {
+        email,
+        password_hash: hash,
+        full_name: fullName,
+        role: 'Customer',
+        is_verified: false,
+        is_active: true,
+      },
+    });
+
+    // Tạo CustomerProfile mặc định
+    await this.prisma.customerProfile.create({
+      data: {
+        user_id: user.user_id,
+        gender: null,
+        medical_history: '',
+        privacy_settings: 'PRIVATE',
+      },
+    });
+
+    return user;
   }
-
-  const hash = await bcrypt.hash(password, 10);
-
-  const user = await this.prisma.user.create({
-    data: {
-      email,
-      password_hash: hash,
-      full_name: fullName,
-      role: 'Customer',
-      is_verified: false,
-      is_active: true,
-    },
-  });
-
-  // Tạo CustomerProfile mặc định
-  await this.prisma.customerProfile.create({
-    data: {
-      user_id: user.user_id,
-      gender: null,
-      medical_history: '',
-      privacy_settings: 'PRIVATE',
-    },
-  });
-
-  return user;
-}
 
   async changePassword(
     userId: string,
@@ -155,6 +156,43 @@ export class AuthService {
       data: { password_hash: hash },
     });
   }
+
+  async revokeRefreshToken(userId: string): Promise<void> {
+    await this.prisma.token.updateMany({
+      where: { user_id: userId, is_revoked: false },
+      data: { is_revoked: true },
+    });
+  }
+
+ async changeUserRole(managerId: string, userId: string, newRole: string): Promise<void> {
+  if (!managerId) {
+    throw new BadRequestException('ID quản lý không hợp lệ');
+  }
+
+  const manager = await this.prisma.user.findUnique({
+    where: { user_id: managerId },
+  });
+  if (!manager || manager.role !== 'Manager') {
+    throw new ForbiddenException('Chỉ có Manager mới có quyền thay đổi vai trò');
+  }
+
+  const validRoles: Role[] = [Role.Customer, Role.Consultant, Role.Manager, Role.Staff, Role.Guest, Role.Admin];
+  if (!validRoles.includes(newRole as Role)) {
+    throw new BadRequestException('Vai trò không hợp lệ');
+  }
+
+  const user = await this.prisma.user.findUnique({
+    where: { user_id: userId },
+  });
+  if (!user) {
+    throw new BadRequestException('Người dùng không tồn tại');
+  }
+
+  await this.prisma.user.update({
+    where: { user_id: userId },
+    data: { role: newRole as Role },
+  });
+}
 
   async getCustomerProfile(userId: string) {
     const profile = await this.prisma.customerProfile.findUnique({

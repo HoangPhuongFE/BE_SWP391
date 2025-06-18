@@ -26,4 +26,6 @@ export class UpdateAppointmentDto {
   @IsString()
   @IsOptional()
   service_id?: string;
+
+  
 }

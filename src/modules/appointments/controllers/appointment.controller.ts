@@ -139,6 +139,7 @@ export class AppointmentController {
   @Get('validate-related/:appointmentId')
   @Roles(Role.Customer)
   @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Kiểm tra điều kiện miễn phí tư vấn dựa trên ID xét nghiệm' })
   async validateRelatedAppointment(@Param('appointmentId') appointmentId: string, @Req() req) {
     const userId = (req.user as any).userId;

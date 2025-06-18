@@ -278,6 +278,7 @@ model Appointment {
   sample_collected_date         DateTime? 
   shipping_info                 ShippingInfo?              //  chỉ giữ relation bên này, KHÔNG cần fields/references ở đây
   mode ServiceMode? 
+  @@index([mode])
 }
 
 model ShippingInfo {
@@ -296,6 +297,7 @@ model ShippingInfo {
   ward                  String
   created_at            DateTime      @default(now())
   updated_at            DateTime      @updatedAt
+  @@index([provider_order_code])
 }
 
 

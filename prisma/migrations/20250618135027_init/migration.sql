@@ -134,6 +134,7 @@ CREATE TABLE `Appointment` (
     `mode` ENUM('AT_HOME', 'AT_CLINIC') NULL,
 
     UNIQUE INDEX `Appointment_schedule_id_key`(`schedule_id`),
+    INDEX `Appointment_mode_idx`(`mode`),
     PRIMARY KEY (`appointment_id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -154,6 +155,7 @@ CREATE TABLE `ShippingInfo` (
     `updated_at` DATETIME(3) NOT NULL,
 
     UNIQUE INDEX `ShippingInfo_appointment_id_key`(`appointment_id`),
+    INDEX `ShippingInfo_provider_order_code_idx`(`provider_order_code`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 

@@ -34,4 +34,34 @@ export class CreateStiAppointmentDto {
   @IsEnum(ServiceMode)
   selected_mode: ServiceMode;
 
+  // Thêm các trường cho ShippingInfo (nếu AT_HOME)
+  @ApiPropertyOptional({ example: 'Nguyen Van A', description: 'Tên người nhận' })
+  @IsString()
+  @IsOptional()
+  contact_name?: string;
+
+  @ApiPropertyOptional({ example: '0909123456', description: 'Số điện thoại liên hệ' })
+  @IsString()
+  @IsOptional()
+  contact_phone?: string;
+
+  @ApiPropertyOptional({ example: '123 Nguyen Van A, Q1', description: 'Địa chỉ nhận kit' })
+  @IsString()
+  @IsOptional()
+  shipping_address?: string;
+
+  @ApiPropertyOptional({ example: 'TP.HCM', description: 'Tỉnh/Thành phố' })
+  @IsString()
+  @IsOptional()
+  province?: string;
+
+  @ApiPropertyOptional({ example: 'Quận 1', description: 'Quận/Huyện' })
+  @IsString()
+  @IsOptional()
+  district?: string;
+
+  @ApiPropertyOptional({ example: 'Phường 1', description: 'Phường/Xã' })
+  @IsString()
+  @IsOptional()
+  ward?: string;
 }

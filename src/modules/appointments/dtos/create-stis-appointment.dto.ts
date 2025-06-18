@@ -1,5 +1,6 @@
 import { IsString, IsEnum, IsOptional, IsDateString } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ServiceMode } from '@modules/services/dtos/create-service.dto';
 
 export enum TestingSession {
   Morning = 'morning',
@@ -28,5 +29,9 @@ export class CreateStiAppointmentDto {
   @IsString()
   @IsOptional()
   category?: string;
+
+  @ApiProperty({ example: 'AT_HOME', enum: ServiceMode, description: 'Hình thức thực hiện' })
+  @IsEnum(ServiceMode)
+  selected_mode: ServiceMode;
 
 }

@@ -1,6 +1,6 @@
 import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
-import { CreateServiceDto } from '../dtos/create-service.dto';
+import { CreateServiceDto, ServiceMode } from '../dtos/create-service.dto';
 import { UpdateServiceDto } from '../dtos/update-service.dto';
 import { ServiceType } from '@prisma/client';
 
@@ -10,61 +10,62 @@ export class ServiceService {
 
   constructor(
     private readonly prisma: PrismaService,
-  ) {}
+  ) { }
 
   async createService(dto: CreateServiceDto) {
-  const {
-    name,
-    category,
-    is_active = true,
-    type,
-    price,
-    description,
-    is_home_test,
-    is_flexible_location,
-    return_address,
-    return_phone,
-  } = dto;
-
-  const existing = await this.prisma.service.findFirst({
-    where: { category, name, deleted_at: null },
-  });
-  if (existing) {
-    throw new BadRequestException('Danh mục và tên dịch vụ đã tồn tại');
-  }
-
-  if (is_home_test || !is_flexible_location) {
-    if (!return_address || !return_phone) {
-      throw new BadRequestException('Dịch vụ yêu cầu địa chỉ và số điện thoại liên hệ');
-    }
-  }
-
-  const defaultTestingHours = type === ServiceType.Testing ? {
-    morning: { start: '07:00', end: '11:00' },
-    afternoon: { start: '13:00', end: '17:00' },
-  } : undefined;
-
-  const defaultDailyCapacity = type === ServiceType.Testing ? 20 : undefined;
-
-  return this.prisma.service.create({
-    data: {
+    const {
       name,
       category,
+      is_active = true,
+      type,
       price,
       description,
-      is_active,
-      type,
-      testing_hours: defaultTestingHours,
-      daily_capacity: defaultDailyCapacity,
-      is_home_test: is_home_test ?? false,
-      is_flexible_location: is_flexible_location ?? false,
-      return_address: return_address ?? null,
-      return_phone: return_phone ?? null,
-      created_at: new Date(),
-      updated_at: new Date(),
-    },
-  });
-}
+      return_address,
+      return_phone,
+      available_modes,
+    } = dto;
+
+    const existing = await this.prisma.service.findFirst({
+      where: { category, name, deleted_at: null },
+    });
+    if (existing) {
+      throw new BadRequestException('Danh mục và tên dịch vụ đã tồn tại');
+    }
+
+    // Nếu có mode AT_HOME hoặc AT_CUSTOM_LOCATION thì cần địa chỉ nhận mẫu
+    if ((available_modes ?? []).includes('AT_HOME' as ServiceMode) && (!return_address || !return_phone)) {
+      throw new BadRequestException('Dịch vụ tại nhà yêu cầu địa chỉ và số điện thoại nhận mẫu');
+    }
+
+    const defaultTestingHours =
+      type === ServiceType.Testing
+        ? {
+          morning: { start: '07:00', end: '11:00' },
+          afternoon: { start: '13:00', end: '17:00' },
+        }
+        : undefined;
+
+    const defaultDailyCapacity = type === ServiceType.Testing ? 20 : undefined;
+
+    return this.prisma.service.create({
+      data: {
+        name,
+        category,
+        price,
+        description,
+        is_active,
+        type,
+        available_modes: available_modes ?? ['AT_CLINIC'],
+        testing_hours: defaultTestingHours,
+        daily_capacity: defaultDailyCapacity,
+        return_address: return_address ?? null,
+        return_phone: return_phone ?? null,
+        created_at: new Date(),
+        updated_at: new Date(),
+      },
+    });
+  }
+
 
 
   async updateService(serviceId: string, dto: UpdateServiceDto) {
@@ -99,27 +100,28 @@ export class ServiceService {
     }
   }
 
-  const willBeHomeTest = dto.is_home_test ?? service.is_home_test;
-  const willBeFlexible = dto.is_flexible_location ?? service.is_flexible_location;
+  const updatedModes = dto.available_modes ?? (service.available_modes as string[] ?? []);
+  const mergedAddress = dto.return_address ?? service.return_address;
+  const mergedPhone = dto.return_phone ?? service.return_phone;
 
-  if ((willBeHomeTest || !willBeFlexible) && (!dto.return_address && !service.return_address || !dto.return_phone && !service.return_phone)) {
-    throw new BadRequestException('Thiếu thông tin nhận mẫu');
+  if (updatedModes.includes('AT_HOME' as ServiceMode) && (!mergedAddress || !mergedPhone)) {
+    throw new BadRequestException('Cập nhật thiếu thông tin nhận mẫu cho dịch vụ tại nhà');
   }
 
   return this.prisma.service.update({
     where: { service_id: serviceId },
     data: {
       ...dto,
+      available_modes: updatedModes,
       testing_hours: updateType === ServiceType.Testing ? service.testing_hours : this.prisma.$type.JsonNull,
       daily_capacity: updateType === ServiceType.Testing ? service.daily_capacity : undefined,
-      is_home_test: willBeHomeTest,
-      is_flexible_location: willBeFlexible,
-      return_address: dto.return_address ?? service.return_address,
-      return_phone: dto.return_phone ?? service.return_phone,
+      return_address: mergedAddress,
+      return_phone: mergedPhone,
       updated_at: new Date(),
     },
   });
 }
+
 
 
   async deleteService(serviceId: string) {

@@ -5,7 +5,11 @@ import { ScheduleService } from '../services/schedule.service';
 import { CreateScheduleDto } from '../dtos/create-schedule.dto';
 import { UpdateScheduleDto } from '../dtos/update-schedule.dto';
 import { Roles } from '../../auth/decorators/roles.decorator';
-import { Role } from '@prisma/client';
+// Define Role enum locally if not exported from elsewhere
+export enum Role {
+  Consultant = 'Consultant',
+  Manager = 'Manager'
+}
 import { BadRequestException } from '@nestjs/common';
 import { BatchCreateScheduleDto } from '../dtos/batch-create-schedule.dto';
 

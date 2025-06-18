@@ -1,7 +1,9 @@
-import { IsString, IsNumber, IsBoolean, IsOptional, IsEnum, Min } from 'class-validator';
+// src/modules/services/dtos/update-service.dto.ts
+import { IsString, IsNumber, IsBoolean, IsOptional, IsEnum, Min, IsArray } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import { ServiceType } from '@prisma/client';
+import { ServiceMode } from './create-service.dto';
 
 export class UpdateServiceDto {
   @ApiPropertyOptional({ example: 'Gói toàn diện', description: 'Tên dịch vụ' })
@@ -36,10 +38,10 @@ export class UpdateServiceDto {
   @IsOptional()
   type?: ServiceType;
 
-  @ApiPropertyOptional({ example: true, description: 'Dịch vụ tại nhà?' })
+  @ApiPropertyOptional({ example: ['AT_HOME', 'AT_CLINIC'], isArray: true, enum: ServiceMode, description: 'Các hình thức dịch vụ hỗ trợ' })
+  @IsEnum(ServiceMode, { each: true })
   @IsOptional()
-  @IsBoolean()
-  is_home_test?: boolean;
+  available_modes?: ServiceMode[];
 
   @ApiPropertyOptional({ example: '123 Nguyễn Văn A, Q1, HCM', description: 'Địa chỉ nhận mẫu' })
   @IsString()
@@ -50,11 +52,4 @@ export class UpdateServiceDto {
   @IsString()
   @IsOptional()
   return_phone?: string;
-
-  @ApiPropertyOptional({ example: true, description: 'Cho phép chọn địa điểm linh hoạt (tại nhà hoặc tại viện)' })
-  @IsBoolean()
-  @IsOptional()
-  is_flexible_location?: boolean;
-
-
 }

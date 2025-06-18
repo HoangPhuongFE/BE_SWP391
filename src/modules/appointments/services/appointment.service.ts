@@ -7,7 +7,7 @@ import { UpdateAppointmentDto } from '../dtos/update-appointment.dto';
 import { UpdateAppointmentStatusDto } from '../dtos/update-appointment-status.dto';
 import { CreatePaymentDto } from '../../payment/dtos/create-payment.dto';
 import { CreateFeedbackDto } from '../dtos/create-feedback.dto';
-import { AppointmentStatus, Role, PaymentMethod, TestResultStatus, ServiceType, FeedbackStatus } from '@prisma/client';
+import { AppointmentStatus, Role, PaymentMethod, TestResultStatus, ServiceType, FeedbackStatus, PaymentTransactionStatus } from '@prisma/client';
 import { ConfirmAppointmentDto } from '../dtos/confirm-appointment.dto';
 import { ServiceMode } from '@modules/services/dtos/create-service.dto';
 
@@ -149,10 +149,10 @@ export class AppointmentService {
   }
 
 
-  async createStiAppointment(dto: CreateStiAppointmentDto & { userId: string }) {
+ async createStiAppointment(dto: CreateStiAppointmentDto & { userId: string }) {
   const { serviceId, date, session, location, category = 'STI', selected_mode, userId, contact_name, contact_phone, shipping_address, province, district, ward } = dto;
 
-  // Kiểm tra ngày hợp lệ
+  // Kiểm tra ngày
   const appointmentDate = new Date(date);
   if (isNaN(appointmentDate.getTime())) throw new BadRequestException('Ngày không hợp lệ');
   if (appointmentDate < new Date()) throw new BadRequestException('Ngày phải trong tương lai');
@@ -161,50 +161,26 @@ export class AppointmentService {
   const svc = await this.prisma.service.findUnique({
     where: { service_id: serviceId, deleted_at: null },
   });
-  if (!svc || svc.type !== ServiceType.Testing) {
-    throw new BadRequestException('Dịch vụ không hợp lệ');
-  }
-  if (!svc.testing_hours || !svc.daily_capacity) {
-    throw new BadRequestException('Dịch vụ chưa được cấu hình');
-  }
+  if (!svc || svc.type !== ServiceType.Testing) throw new BadRequestException('Dịch vụ không hợp lệ');
+  if (!svc.testing_hours || !svc.daily_capacity) throw new BadRequestException('Dịch vụ chưa được cấu hình');
 
   // Kiểm tra mode
   const modes = (svc.available_modes as ServiceMode[]) ?? [];
-  if (!modes.includes(selected_mode)) {
-    throw new BadRequestException('Dịch vụ không hỗ trợ hình thức đã chọn');
-  }
-  if (selected_mode === ServiceMode.AT_CLINIC && !location) {
-    throw new BadRequestException('Cần cung cấp địa điểm xét nghiệm tại cơ sở');
-  }
-  if (selected_mode === ServiceMode.AT_HOME && (!contact_name || !contact_phone || !shipping_address || !province || !district || !ward)) {
-    throw new BadRequestException('Cần cung cấp đầy đủ thông tin vận chuyển cho xét nghiệm tại nhà');
-  }
+  if (!modes.includes(selected_mode)) throw new BadRequestException('Dịch vụ không hỗ trợ hình thức đã chọn');
 
   // Kiểm tra khung giờ
-  const testingHours = svc.testing_hours as {
-    morning?: { start: string; end: string };
-    afternoon?: { start: string; end: string };
-  };
-  if (!testingHours[session]) {
-    throw new BadRequestException(`Buổi ${session} không hỗ trợ`);
-  }
+  const testingHours = svc.testing_hours as { morning?: { start: string; end: string }; afternoon?: { start: string; end: string } };
+  if (!testingHours[session]) throw new BadRequestException(`Buổi ${session} không hỗ trợ`);
 
   // Kiểm tra dung lượng
   const startOfDay = new Date(date);
   startOfDay.setHours(0, 0, 0, 0);
   const endOfDay = new Date(date);
   endOfDay.setHours(23, 59, 59, 999);
-
   const existingAppointments = await this.prisma.appointment.count({
-    where: {
-      service_id: serviceId,
-      start_time: { gte: startOfDay, lte: endOfDay },
-      status: { not: 'Cancelled' },
-    },
+    where: { service_id: serviceId, start_time: { gte: startOfDay, lte: endOfDay }, status: { not: 'Cancelled' } },
   });
-  if (existingAppointments >= svc.daily_capacity) {
-    throw new BadRequestException('Dung lượng đã đầy');
-  }
+  if (existingAppointments >= svc.daily_capacity) throw new BadRequestException('Dung lượng đã đầy');
 
   // Tính thời gian lịch hẹn
   const sessionHours = testingHours[session];
@@ -213,7 +189,6 @@ export class AppointmentService {
   const slotDuration = 30;
   const slotsUsed = existingAppointments % Math.floor(svc.daily_capacity / 2);
   const slotStartMinutes = startMinute + slotsUsed * slotDuration;
-
   const startTime = new Date(appointmentDate);
   startTime.setHours(startHour, slotStartMinutes, 0, 0);
   const endTime = new Date(startTime);
@@ -221,51 +196,29 @@ export class AppointmentService {
 
   // Tạo mã đơn hàng
   let orderCode: number | null = null;
-  const orderCodes = new Set();
   for (let i = 0; i < 3; i++) {
     const cand = Number(`${Date.now() % 100000}${Math.floor(Math.random() * 1000)}`.padStart(8, '0'));
-    if (!orderCodes.has(cand) && !(await this.prisma.payment.findUnique({ where: { order_code: cand } }))) {
+    if (!(await this.prisma.payment.findUnique({ where: { order_code: cand } }))) {
       orderCode = cand;
       break;
     }
-    orderCodes.add(cand);
   }
   if (!orderCode) throw new BadRequestException('Tạo mã thanh toán thất bại');
 
   // Tạo mã xét nghiệm
   let testCode: string | null = null;
-  const testCodes = new Set();
   for (let i = 0; i < 3; i++) {
     const cand = this.generateTestCode(category);
-    if (!testCodes.has(cand) && !(await this.prisma.testResult.findFirst({ where: { test_code: cand } }))) {
+    if (!(await this.prisma.testResult.findFirst({ where: { test_code: cand } }))) {
       testCode = cand;
       break;
     }
-    testCodes.add(cand);
   }
   if (!testCode) throw new BadRequestException('Tạo mã xét nghiệm thất bại');
 
-  // Tạo payment link trước transaction
-  const payDto: CreatePaymentDto = {
-    orderCode,
-    amount: Number(svc.price),
-    description: `XN ${svc.name}`.substring(0, 25),
-    cancelUrl: 'https://your-frontend/.../cancel',
-    returnUrl: 'https://your-frontend/.../success',
-    buyerName: userId,
-    paymentMethod: PaymentMethod.BankCard,
-    appointmentId: '', // Sẽ cập nhật sau khi tạo appointment
-  };
-  let paymentLink: string;
-  try {
-    const result = await this.paymentService.createPaymentLink(userId, payDto);
-    paymentLink = result.paymentLink;
-  } catch (error) {
-    throw new BadRequestException('Tạo liên kết thanh toán thất bại');
-  }
-
-  // Transaction với timeout tăng
-  const [appt, testResult] = await this.prisma.$transaction(
+  // Transaction
+  let paymentLink: string | undefined;
+  const [appt, testResult, payment] = await this.prisma.$transaction(
     async (prisma) => {
       // Tạo lịch hẹn
       const appt = await prisma.appointment.create({
@@ -282,37 +235,18 @@ export class AppointmentService {
         },
       });
 
-      // Cập nhật appointmentId cho payDto
-      payDto.appointmentId = appt.appointment_id;
-
-      // Ghi lịch sử trạng thái lịch hẹn
+      // Ghi lịch sử trạng thái
       await prisma.appointmentStatusHistory.create({
-        data: {
-          appointment_id: appt.appointment_id,
-          status: 'Pending',
-          notes: 'Tạo lịch hẹn xét nghiệm',
-          changed_by: userId,
-        },
+        data: { appointment_id: appt.appointment_id, status: 'Pending', notes: 'Tạo lịch hẹn xét nghiệm', changed_by: userId },
       });
 
       // Tạo kết quả xét nghiệm
       const testResult = await prisma.testResult.create({
-        data: {
-          appointment_id: appt.appointment_id,
-          service_id: serviceId,
-          result_data: 'Pending',
-          status: 'Pending',
-          test_code: testCode,
-        },
+        data: { appointment_id: appt.appointment_id, service_id: serviceId, result_data: 'Pending', status: 'Pending', test_code: testCode },
       });
 
       await prisma.testResultStatusHistory.create({
-        data: {
-          result_id: testResult.result_id,
-          status: 'Pending',
-          notes: 'Kết quả khởi tạo',
-          changed_by: userId,
-        },
+        data: { result_id: testResult.result_id, status: 'Pending', notes: 'Kết quả khởi tạo', changed_by: userId },
       });
 
       // Tạo ShippingInfo cho AT_HOME
@@ -322,15 +256,41 @@ export class AppointmentService {
             appointment_id: appt.appointment_id,
             provider: 'GHTK',
             shipping_status: 'Pending',
-            contact_name: contact_name ?? "",
-            contact_phone: contact_phone ?? "",
-            shipping_address: shipping_address ?? "",
-            province: province ?? "",
-            district: district ?? "",
-            ward: ward ?? "",
+            contact_name: contact_name!,
+            contact_phone: contact_phone!,
+            shipping_address: shipping_address!,
+            province: province!,
+            district: district!,
+            ward: ward!,
           },
         });
       }
+
+      // Tạo bản ghi Payment
+      const payment = await prisma.payment.create({
+        data: {
+          appointment_id: appt.appointment_id,
+          user_id: userId,
+          amount: Number(svc.price),
+          payment_method: PaymentMethod.BankCard,
+          status: PaymentTransactionStatus.Pending,
+          order_code: orderCode,
+        },
+      });
+
+      // Tạo payment link
+      const payDto: CreatePaymentDto = {
+        orderCode,
+        amount: Number(svc.price),
+        description: `XN ${svc.name}`.substring(0, 25),
+        cancelUrl: 'https://your-frontend/.../cancel',
+        returnUrl: 'https://your-frontend/.../success',
+        buyerName: userId,
+        paymentMethod: PaymentMethod.BankCard,
+        appointmentId: appt.appointment_id,
+      };
+      const paymentLinkResult = await this.paymentService.createPaymentLink(userId, payDto);
+      paymentLink = paymentLinkResult.paymentLink;
 
       // Tạo thông báo
       await prisma.notification.create({
@@ -343,21 +303,14 @@ export class AppointmentService {
         },
       });
 
-      return [appt, testResult];
+      return [appt, testResult, payment];
     },
-    { timeout: 10000 }, // Tăng timeout lên 10 giây
+    { timeout: 10000 }
   );
 
   this.logger.log(`Tạo lịch xét nghiệm ${appt.appointment_id} bởi user ${userId}`);
 
-  return {
-    appointment: appt,
-    paymentLink,
-    testCode,
-    message: 'Đặt lịch xét nghiệm thành công',
-    return_address: svc.return_address,
-    return_phone: svc.return_phone,
-  };
+  return { appointment: appt, paymentLink, testCode, message: 'Đặt lịch xét nghiệm thành công', return_address: svc.return_address, return_phone: svc.return_phone };
 }
 
 

@@ -20,7 +20,7 @@ export class CreateStiAppointmentDto {
   @IsEnum(TestingSession)
   session: TestingSession;
 
-  @ApiPropertyOptional({ example: 'Phòng khám X', description: 'Địa điểm' })
+  @ApiPropertyOptional({ example: 'Phòng khám X', description: 'Địa điểm xét nghiệm tại cơ sở' })
   @IsString()
   @IsOptional()
   location?: string;
@@ -34,33 +34,32 @@ export class CreateStiAppointmentDto {
   @IsEnum(ServiceMode)
   selected_mode: ServiceMode;
 
-  // Thêm các trường cho ShippingInfo (nếu AT_HOME)
-  @ApiPropertyOptional({ example: 'Nguyen Van A', description: 'Tên người nhận' })
+  @ApiPropertyOptional({ example: 'Nguyen Van A', description: 'Tên người nhận (bắt buộc cho AT_HOME)' })
   @IsString()
   @IsOptional()
   contact_name?: string;
 
-  @ApiPropertyOptional({ example: '0909123456', description: 'Số điện thoại liên hệ' })
+  @ApiPropertyOptional({ example: '0909123456', description: 'Số điện thoại liên hệ (bắt buộc cho AT_HOME)' })
   @IsString()
   @IsOptional()
   contact_phone?: string;
 
-  @ApiPropertyOptional({ example: '123 Nguyen Van A, Q1', description: 'Địa chỉ nhận kit' })
+  @ApiPropertyOptional({ example: '123 Nguyen Van A, Q1', description: 'Địa chỉ nhận kit (bắt buộc cho AT_HOME)' })
   @IsString()
   @IsOptional()
   shipping_address?: string;
 
-  @ApiPropertyOptional({ example: 'TP.HCM', description: 'Tỉnh/Thành phố' })
+  @ApiPropertyOptional({ example: 'TP.HCM', description: 'Tỉnh/Thành phố (bắt buộc cho AT_HOME)' })
   @IsString()
   @IsOptional()
   province?: string;
 
-  @ApiPropertyOptional({ example: 'Quận 1', description: 'Quận/Huyện' })
+  @ApiPropertyOptional({ example: 'Quận 1', description: 'Quận/Huyện (bắt buộc cho AT_HOME)' })
   @IsString()
   @IsOptional()
   district?: string;
 
-  @ApiPropertyOptional({ example: 'Phường 1', description: 'Phường/Xã' })
+  @ApiPropertyOptional({ example: 'Phường 1', description: 'Phường/Xã (bắt buộc cho AT_HOME)' })
   @IsString()
   @IsOptional()
   ward?: string;

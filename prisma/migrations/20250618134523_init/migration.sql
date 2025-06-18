@@ -131,6 +131,7 @@ CREATE TABLE `Appointment` (
     `free_consultation_valid_until` DATETIME(3) NULL,
     `payment_refunded` BOOLEAN NOT NULL DEFAULT false,
     `sample_collected_date` DATETIME(3) NULL,
+    `mode` ENUM('AT_HOME', 'AT_CLINIC') NULL,
 
     UNIQUE INDEX `Appointment_schedule_id_key`(`schedule_id`),
     PRIMARY KEY (`appointment_id`)

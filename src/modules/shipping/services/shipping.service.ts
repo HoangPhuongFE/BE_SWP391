@@ -64,17 +64,42 @@ export class ShippingService {
   }
 
   async updateShippingStatus(appointmentId: string, dto: UpdateShippingStatusDto) {
-    const shippingInfo = await this.prisma.shippingInfo.findUnique({
+  const shippingInfo = await this.prisma.shippingInfo.findUnique({
+    where: { appointment_id: appointmentId },
+    include: { appointment: true },
+  });
+
+  if (!shippingInfo) throw new BadRequestException('No shipping info found');
+
+  const updatedShipping = await this.prisma.shippingInfo.update({
+    where: { appointment_id: appointmentId },
+    data: { shipping_status: dto.shipping_status },
+  });
+
+  // 👇 Nếu trạng thái là ReturnedToLab thì cập nhật lịch
+  if (dto.shipping_status === 'ReturnedToLab') {
+    await this.prisma.appointment.update({
       where: { appointment_id: appointmentId },
+      data: {
+        status: 'SampleCollected',
+        sample_collected_date: new Date(),
+        updated_at: new Date(),
+      },
     });
 
-    if (!shippingInfo) throw new BadRequestException('No shipping info found');
-
-    return this.prisma.shippingInfo.update({
-      where: { appointment_id: appointmentId },
-      data: { shipping_status: dto.shipping_status },
+    await this.prisma.appointmentStatusHistory.create({
+      data: {
+        appointment_id: appointmentId,
+        status: 'SampleCollected',
+        notes: 'Nhận mẫu từ khách thành công',
+        changed_by: 'system', // hoặc truyền userId nếu có
+      },
     });
   }
+
+  return updatedShipping;
+}
+
 
   async customerReturnSample(appointmentId: string) {
     const shippingInfo = await this.prisma.shippingInfo.findUnique({

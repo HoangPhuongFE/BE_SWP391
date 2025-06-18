@@ -83,6 +83,10 @@ export class AuthService {
       sub: user.user_id,
       email: user.email,
       role: user.role,
+      fullName: user.full_name,
+      isVerified: user.is_verified,
+      isActive: user.is_active,
+      
     };
 
     const accessToken = this.jwtService.sign(payload, { expiresIn: '2h' });

@@ -153,24 +153,59 @@ export class CycleService {
     });
   }
 
+  // async getCycles(userId: string, query: { startDate?: string; endDate?: string; limit?: number; page?: number }) {
+  //   const { startDate, endDate, limit = 10, page = 1 } = query;
+  //   const where: any = { user_id: userId, deleted_at: null };
+
+  //   if (startDate) where.start_date = { gte: new Date(startDate) };
+  //   if (endDate) where.start_date = { ...where.start_date, lte: new Date(endDate) };
+
+  //   const cycles = await this.prisma.menstrualCycle.findMany({
+  //     where,
+  //     orderBy: { start_date: 'desc' },
+  //     take: limit,
+  //     skip: (page - 1) * limit,
+  //   });
+
+  //   const total = await this.prisma.menstrualCycle.count({ where });
+
+  //   return { cycles, total, page, limit };
+  // }
   async getCycles(userId: string, query: { startDate?: string; endDate?: string; limit?: number; page?: number }) {
-    const { startDate, endDate, limit = 10, page = 1 } = query;
-    const where: any = { user_id: userId, deleted_at: null };
+  const { startDate, endDate, limit = 10, page = 1 } = query;
+  const where: any = { user_id: userId, deleted_at: null };
 
-    if (startDate) where.start_date = { gte: new Date(startDate) };
-    if (endDate) where.start_date = { ...where.start_date, lte: new Date(endDate) };
+  if (startDate) where.start_date = { gte: new Date(startDate) };
+  if (endDate) where.start_date = { ...where.start_date, lte: new Date(endDate) };
 
-    const cycles = await this.prisma.menstrualCycle.findMany({
+  const [cycles, total] = await this.prisma.$transaction([
+    this.prisma.menstrualCycle.findMany({
       where,
       orderBy: { start_date: 'desc' },
       take: limit,
       skip: (page - 1) * limit,
-    });
+    }),
+    this.prisma.menstrualCycle.count({ where }),
+  ]);
 
-    const total = await this.prisma.menstrualCycle.count({ where });
+  // Tính ngày bắt đầu chu kỳ kế tiếp (dự đoán) từ chu kỳ gần nhất
+  let predictions: { nextCycleStart: Date; ovulationDate: Date } | null = null;
 
-    return { cycles, total, page, limit };
+  if (cycles.length > 0) {
+    const latest = cycles[0];
+    const averageCycleLength =
+      cycles.length >= 3
+        ? cycles.slice(0, 3).reduce((sum, c) => sum + (c.cycle_length || 28), 0) / 3
+        : latest.cycle_length || 28;
+
+    predictions = {
+      nextCycleStart: new Date(latest.start_date.getTime() + averageCycleLength * 24 * 60 * 60 * 1000),
+      ovulationDate: latest.ovulation_date, // đã lưu sẵn
+    };
   }
+
+  return { cycles, total, page, limit, predictions };
+}
 
   async getAnalytics(userId: string, timeRange: string = '3months') {
     const ranges = { '3months': 3, '6months': 6, '1year': 12 };

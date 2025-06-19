@@ -824,39 +824,44 @@ export class AppointmentService {
       message: 'Lấy danh sách lịch hẹn thành công',
     };
   }
-  async getPendingAppointments() {
-    const appointments = await this.prisma.appointment.findMany({
-      where: {
-        status: AppointmentStatus.Pending,
-        deleted_at: null,
-      },
-      include: {
-        user: { select: { user_id: true, full_name: true, email: true, phone_number: true } },
-        service: { select: { service_id: true, name: true, category: true } },
-        shipping_info: true,
-      },
-      orderBy: { created_at: 'asc' },
-    });
+ async getPendingAppointments() {
+  const appointments = await this.prisma.appointment.findMany({
+    where: {
+      status: AppointmentStatus.Pending,
+      deleted_at: null,
+    },
+    include: {
+      user: { select: { user_id: true, full_name: true, email: true, phone_number: true } },
+      service: { select: { service_id: true, name: true, category: true } },
+      shipping_info: true,
+    },
+    orderBy: { created_at: 'asc' },
+  });
 
-    return {
-      appointments: appointments.map((appt) => ({
-        appointment_id: appt.appointment_id,
-        type: appt.type,
-        start_time: appt.start_time,
-        end_time: appt.end_time,
-        payment_status: appt.payment_status,
-        location: appt.location,
-        mode: appt.mode,
-        user: {
-          user_id: appt.user.user_id,
-          full_name: appt.user.full_name,
-          email: appt.user.email,
-          phone_number: appt.user.phone_number,
-        },
-        service: appt.service,
-        shipping_info: appt.mode === ServiceMode.AT_HOME ? appt.shipping_info : null,
-      })),
-      message: 'Lấy danh sách lịch hẹn cần xác nhận thành công',
-    };
-  }
+  return {
+    appointments: appointments.map((appt) => ({
+      appointment_id: appt.appointment_id,
+      type: appt.type,
+      start_time: appt.start_time,
+      end_time: appt.end_time,
+      payment_status: appt.payment_status,
+      location: appt.location,
+      mode: appt.mode,
+      user: {
+        user_id: appt.user.user_id,
+        full_name: appt.user.full_name,
+        email: appt.user.email,
+        phone_number: appt.user.phone_number,
+      },
+      service: appt.service,
+      shipping_info: appt.mode === ServiceMode.AT_HOME ? appt.shipping_info : null,
+    })),
+    total: appointments.length,
+    message:
+      appointments.length > 0
+        ? 'Lấy danh sách lịch hẹn cần xác nhận thành công'
+        : 'Không có lịch hẹn nào cần xác nhận',
+  };
+}
+
 }

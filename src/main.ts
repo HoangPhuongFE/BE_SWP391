@@ -22,7 +22,7 @@ async function bootstrap() {
 
   // 4) Cấu hình Swagger (nếu vẫn muốn ở /api, hoặc đổi sang /docs)
   const config = new DocumentBuilder()
-    .setTitle('SWPT - Health Care Management API')
+    .setTitle('SWP - Health Care Management API')
     .setDescription('Phần mềm quản lý dịch vụ chăm sóc sức khỏe giới tính')
     .setVersion('1.0')
     .addBearerAuth({
@@ -40,14 +40,6 @@ async function bootstrap() {
 
   // **Lựa chọn B (khuyến nghị)**: Tách hẳn Swagger UI ra /docs
    SwaggerModule.setup('docs', app, document);
-    
-  //https://learnup.work/api
-  //https://learnup.work/docs (Swagger UI)
-  //https://learnup.work/api/auth/google
-
-  //http://localhost:3001/docs (Swagger UI) chạy được API 
-  //http://localhost:3001/api (API gốc)
-  //http://localhost:3001/api/auth/google
 
   // 5) CORS và listen
   app.enableCors({

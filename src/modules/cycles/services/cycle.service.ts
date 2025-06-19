@@ -10,7 +10,7 @@ export class CycleService {
   private readonly logger = new Logger(CycleService.name);
 
   constructor(private readonly prisma: PrismaService,
-    private readonly emailService: EmailService) {}
+    private readonly emailService: EmailService) { }
 
   async setupCycle(userId: string, dto: SetupCycleDto) {
     const { startDate, periodLength, previousCycles } = dto;
@@ -29,7 +29,7 @@ export class CycleService {
 
     // Tính độ dài chu kỳ trung bình
     let averageCycleLength = 28;
-    if (previousCycles && previousCycles.length >= 3) {
+    if (previousCycles && previousCycles.length >= 2) {
       const cycleLengths = previousCycles
         .map((cycle, index, arr) => {
           if (index === 0) return null;
@@ -171,41 +171,57 @@ export class CycleService {
 
   //   return { cycles, total, page, limit };
   // }
-  async getCycles(userId: string, query: { startDate?: string; endDate?: string; limit?: number; page?: number }) {
-  const { startDate, endDate, limit = 10, page = 1 } = query;
-  const where: any = { user_id: userId, deleted_at: null };
+  async getCycles(
+    userId: string,
+    query: { startDate?: string; endDate?: string; limit?: number; page?: number }
+  ) {
+    const { startDate, endDate, limit = 10, page = 1 } = query;
+    const where: any = { user_id: userId, deleted_at: null };
 
-  if (startDate) where.start_date = { gte: new Date(startDate) };
-  if (endDate) where.start_date = { ...where.start_date, lte: new Date(endDate) };
+    if (startDate) where.start_date = { gte: new Date(startDate) };
+    if (endDate) where.start_date = { ...where.start_date, lte: new Date(endDate) };
 
-  const [cycles, total] = await this.prisma.$transaction([
-    this.prisma.menstrualCycle.findMany({
-      where,
-      orderBy: { start_date: 'desc' },
-      take: limit,
-      skip: (page - 1) * limit,
-    }),
-    this.prisma.menstrualCycle.count({ where }),
-  ]);
+    // Truy vấn dữ liệu chính
+    const [cycles, total] = await this.prisma.$transaction([
+      this.prisma.menstrualCycle.findMany({
+        where,
+        orderBy: { start_date: 'desc' },
+        take: limit,
+        skip: (page - 1) * limit,
+      }),
+      this.prisma.menstrualCycle.count({ where }),
+    ]);
 
-  // Tính ngày bắt đầu chu kỳ kế tiếp (dự đoán) từ chu kỳ gần nhất
-  let predictions: { nextCycleStart: Date; ovulationDate: Date } | null = null;
+    // Dự đoán chu kỳ kế tiếp
+    let predictions: { nextCycleStart: Date; ovulationDate: Date } | null = null;
 
-  if (cycles.length > 0) {
-    const latest = cycles[0];
-    const averageCycleLength =
-      cycles.length >= 3
-        ? cycles.slice(0, 3).reduce((sum, c) => sum + (c.cycle_length || 28), 0) / 3
-        : latest.cycle_length || 28;
+    if (cycles.length >= 1) {
+      const cycleDates = cycles
+        .map(c => c.start_date)
+        .sort((a, b) => b.getTime() - a.getTime());
 
-    predictions = {
-      nextCycleStart: new Date(latest.start_date.getTime() + averageCycleLength * 24 * 60 * 60 * 1000),
-      ovulationDate: latest.ovulation_date, // đã lưu sẵn
-    };
+      let averageCycleLength = 28;
+
+      if (cycleDates.length >= 2) {
+        const diffs: number[] = [];
+        for (let i = 0; i < cycleDates.length - 1; i++) {
+          const diff = (cycleDates[i].getTime() - cycleDates[i + 1].getTime()) / (1000 * 60 * 60 * 24);
+          diffs.push(diff);
+        }
+        averageCycleLength = diffs.reduce((sum, d) => sum + d, 0) / diffs.length;
+      } else if (cycles[0].cycle_length) {
+        averageCycleLength = cycles[0].cycle_length!;
+      }
+
+      predictions = {
+        nextCycleStart: new Date(cycleDates[0].getTime() + averageCycleLength * 24 * 60 * 60 * 1000),
+        ovulationDate: cycles[0].ovulation_date || new Date(cycleDates[0].getTime() + 14 * 24 * 60 * 60),
+      };
+    }
+
+    return { cycles, total, page, limit, predictions };
   }
 
-  return { cycles, total, page, limit, predictions };
-}
 
   async getAnalytics(userId: string, timeRange: string = '3months') {
     const ranges = { '3months': 3, '6months': 6, '1year': 12 };

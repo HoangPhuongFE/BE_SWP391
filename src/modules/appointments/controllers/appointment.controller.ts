@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Patch, Delete, Body, Param, Req, UseGuards } from '@nestjs/common';
+import { Controller, Post, Get, Patch, Delete, Body, Param, Req, UseGuards, BadRequestException } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody, ApiParam } from '@nestjs/swagger';
 import { AppointmentService } from '../services/appointment.service';
@@ -47,16 +47,7 @@ export class AppointmentController {
     return this.appointmentService.getAllAppointments();
   }
 
-  @Get(':appointmentId')
-  @UseGuards(AuthGuard('jwt'))
-  @ApiOperation({ summary: 'Xem chi tiết lịch hẹn theo ID' })
-  @ApiBearerAuth('access-token')
-  @ApiParam({ name: 'appointmentId', description: 'ID lịch hẹn' })
-  async getAppointmentById(@Param('appointmentId') appointmentId: string, @Req() req) {
-    const userId = (req.user as any).userId;
-    const role = (req.user as any).role;
-    return this.appointmentService.getAppointmentById(appointmentId, userId, role);
-  }
+  
 
   @Patch(':appointmentId/status')
   @Roles(Role.Staff, Role.Manager, Role.Admin)
@@ -150,10 +141,12 @@ export class AppointmentController {
   @Get('my-appointments')
   @Roles(Role.Customer)
   @UseGuards(AuthGuard('jwt'))
-  @ApiOperation({ summary: 'Xem toàn bộ lịch hẹn của khách hàng' })
+  @ApiOperation({ summary: 'Khách hàng xem toàn bộ lịch hẹn của mình' })
   @ApiBearerAuth('access-token')
   async getMyAppointments(@Req() req) {
-    const userId = req.user.userId;
+    console.log('Request user:', req.user);
+    const userId = (req.user as any).userId;
+    if (!userId) throw new BadRequestException('Không tìm thấy userId trong token');
     return this.appointmentService.getUserAppointments(userId);
   }
 
@@ -164,5 +157,16 @@ export class AppointmentController {
   @ApiBearerAuth('access-token')
   async getPendingAppointments() {
     return this.appointmentService.getPendingAppointments();
+  }
+
+  @Get(':appointmentId')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiOperation({ summary: 'Xem chi tiết lịch hẹn theo ID' })
+  @ApiBearerAuth('access-token')
+  @ApiParam({ name: 'appointmentId', description: 'ID lịch hẹn' })
+  async getAppointmentById(@Param('appointmentId') appointmentId: string, @Req() req) {
+    const userId = (req.user as any).userId;
+    const role = (req.user as any).role;
+    return this.appointmentService.getAppointmentById(appointmentId, userId, role);
   }
 }

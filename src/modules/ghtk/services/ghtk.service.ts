@@ -14,7 +14,7 @@ export class GhtkService {
     private readonly httpService: HttpService,
     private readonly configService: ConfigService,
   ) {
-    this.apiUrl = this.configService.get<string>('GHTK_API_URL') || 'https://services.giaohangtietkiem.vn';
+    this.apiUrl = this.configService.get<string>('GHTK_API_URL') || '';
     this.token = this.configService.get<string>('GHTK_API_TOKEN') || '';
     if (!this.token) {
       throw new BadRequestException('GHTK_API_TOKEN không được cấu hình');

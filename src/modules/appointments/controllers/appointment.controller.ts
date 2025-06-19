@@ -117,6 +117,7 @@ export class AppointmentController {
   @Patch(':appointmentId/feedback')
   @Roles(Role.Customer)
   @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Gửi feedback và rating cho buổi tư vấn' })
   @ApiParam({ name: 'appointmentId', description: 'ID lịch hẹn tư vấn' })
   @ApiBody({ type: CreateFeedbackDto })

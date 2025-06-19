@@ -22,8 +22,8 @@ async function bootstrap() {
 
   // 4) Cấu hình Swagger (nếu vẫn muốn ở /api, hoặc đổi sang /docs)
   const config = new DocumentBuilder()
-    .setTitle('SWP - Graduation Thesis API')
-    .setDescription('API Quản lí chu kỳ kinh nguyệt')
+    .setTitle('SWPT - Health Care Management API')
+    .setDescription('Phần mềm quản lý dịch vụ chăm sóc sức khỏe giới tính')
     .setVersion('1.0')
     .addBearerAuth({
       type: 'http',

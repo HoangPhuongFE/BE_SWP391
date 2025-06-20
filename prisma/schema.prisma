@@ -235,7 +235,7 @@ model Service {
   daily_capacity Int?          // Số lượng lịch hẹn tối đa mỗi ngày
   return_address String?      @db.VarChar(255) // Địa chỉ nhận mẫu
   return_phone   String?      @db.VarChar(20)  // Số điện thoại liên hệ
-  available_modes Json? // 👈 Mảng JSON gồm: ["AT_HOME", "AT_CLINIC"]
+  available_modes Json? //  Mảng JSON gồm: ["AT_HOME", "AT_CLINIC"]
 
   created_at     DateTime      @default(now())
   updated_at     DateTime      @updatedAt

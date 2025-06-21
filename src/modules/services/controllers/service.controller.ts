@@ -6,11 +6,12 @@ import { CreateServiceDto } from '../dtos/create-service.dto';
 import { UpdateServiceDto } from '../dtos/update-service.dto';
 import { Roles } from '../../auth/decorators/roles.decorator';
 import { Role } from '@prisma/client';
+import { Public } from '../../auth/decorators/public.decorator';
 
 @ApiTags('Services')
 @Controller('services')
 export class ServiceController {
-  constructor(private readonly serviceService: ServiceService) {}
+  constructor(private readonly serviceService: ServiceService) { }
 
   @Post()
   @Roles(Role.Manager)
@@ -53,21 +54,13 @@ export class ServiceController {
   }
 
   @Get(':serviceId')
-  @ApiOperation({ summary: 'Xem chi tiết dịch vụ theo ID' })
-  @ApiBearerAuth('access-token')
+  @Public()
+  @ApiOperation({ summary: 'Xem chi tiết dịch vụ bao gồm thời gian tư vấn' })
   @ApiParam({ name: 'serviceId', description: 'ID dịch vụ' })
-  async getServiceById(@Param('serviceId') serviceId: string) {
-    return this.serviceService.getServiceById(serviceId);
+  @ApiQuery({ name: 'date', description: 'Ngày lọc lịch (YYYY-MM-DD)', required: false })
+  async getServiceById(@Param('serviceId') serviceId: string, @Query('date') date?: string) {
+    return this.serviceService.getServiceById(serviceId, date);
   }
 
-  @Get(':serviceId/consultants')
-  @Roles(Role.Manager, Role.Staff)
-  @UseGuards(AuthGuard('jwt'))
-  @ApiOperation({ summary: 'Xem danh sách Consultant và lịch trống theo dịch vụ' })
-  @ApiBearerAuth('access-token')
-  @ApiParam({ name: 'serviceId', description: 'ID dịch vụ' })
-  @ApiQuery({ name: 'date', required: false, description: 'Lọc lịch trống theo ngày (YYYY-MM-DD)' })
-  async getConsultantsWithSchedules(@Param('serviceId') serviceId: string, @Query('date') date?: string) {
-    return this.serviceService.getConsultantsWithSchedules(serviceId, date);
-  }
+
 }

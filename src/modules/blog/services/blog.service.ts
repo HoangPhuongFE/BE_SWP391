@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, BadRequestException, ForbiddenException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { CreateBlogDto } from '../dtos/create-blog.dto';
 import { UpdateBlogDto } from '../dtos/update-blog.dto';
@@ -38,8 +38,38 @@ export class BlogService {
     const blogs = await this.prisma.blogPost.findMany({
       where: { is_published: true, deleted_at: null },
       orderBy: { created_at: 'desc' },
+      select: {
+        post_id: true,
+        title: true,
+        content: true,
+        category: true,
+        author: { select: { full_name: true } },
+        is_published: true,
+        views_count: true,
+        created_at: true,
+        updated_at: true,
+      },
     });
     return { blogs, message: 'Lấy danh sách bài viết thành công' };
+  }
+
+  async getAllPublicBlogs() {
+    const blogs = await this.prisma.blogPost.findMany({
+      where: { is_published: true, deleted_at: null },
+      orderBy: { created_at: 'desc' },
+      select: {
+        post_id: true,
+        title: true,
+        content: true,
+        category: true,
+        author: { select: { full_name: true } },
+        is_published: true,
+        views_count: true,
+        created_at: true,
+        updated_at: true,
+      },
+    });
+    return { blogs, message: 'Lấy danh sách bài viết công khai thành công' };
   }
 
   async getPendingBlogs() {
@@ -48,7 +78,7 @@ export class BlogService {
         is_published: false,
         deleted_at: null,
         author: {
-          role: Role.Consultant, // Lọc bài viết của Consultant
+          role: Role.Consultant,
         },
       },
       orderBy: { created_at: 'desc' },
@@ -59,6 +89,18 @@ export class BlogService {
   async getBlogById(id: string, userId: string, role: Role) {
     const blog = await this.prisma.blogPost.findUnique({
       where: { post_id: id, deleted_at: null },
+      select: {
+        post_id: true,
+        title: true,
+        content: true,
+        category: true,
+        author_id: true,
+        author: { select: { full_name: true } },
+        is_published: true,
+        views_count: true,
+        created_at: true,
+        updated_at: true,
+      },
     });
     if (!blog) throw new BadRequestException('Bài viết không tồn tại');
 
@@ -70,6 +112,27 @@ export class BlogService {
     }
 
     return { blog, message: 'Lấy chi tiết bài viết thành công' };
+  }
+
+  async getPublicBlogById(id: string) {
+    const blog = await this.prisma.blogPost.findUnique({
+      where: { post_id: id, deleted_at: null },
+      select: {
+        post_id: true,
+        title: true,
+        content: true,
+        category: true,
+        author: { select: { full_name: true } },
+        is_published: true,
+        views_count: true,
+        created_at: true,
+        updated_at: true,
+      },
+    });
+    if (!blog) throw new BadRequestException('Bài viết không tồn tại');
+    if (!blog.is_published) throw new ForbiddenException('Bài viết chưa được xuất bản');
+
+    return { blog, message: 'Lấy chi tiết bài viết công khai thành công' };
   }
 
   async updateBlog(id: string, dto: UpdateBlogDto, userId: string, role: Role) {

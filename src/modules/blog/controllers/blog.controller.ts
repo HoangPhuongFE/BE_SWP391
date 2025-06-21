@@ -1,11 +1,12 @@
-import { Controller, Post, Get, Put, Delete, Body, Param, Req, UseGuards, HttpCode } from '@nestjs/common';
+import { Controller, Post, Get, Put, Delete, Body, Param, Req, UseGuards, HttpCode, Query } from '@nestjs/common';
 import { BlogService } from '../services/blog.service';
 import { CreateBlogDto } from '../dtos/create-blog.dto';
 import { UpdateBlogDto } from '../dtos/update-blog.dto';
 import { ApproveBlogDto } from '../dtos/approve-blog.dto';
 import { AuthGuard } from '@nestjs/passport';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody, ApiParam } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody, ApiParam, ApiQuery } from '@nestjs/swagger';
 import { Roles } from '../../auth/decorators/roles.decorator';
+import { Public } from '../../auth/decorators/public.decorator';
 import { Role } from '@prisma/client';
 
 @ApiTags('blogs')
@@ -28,10 +29,17 @@ export class BlogController {
   @Get()
   @Roles(Role.Staff, Role.Manager, Role.Customer)
   @UseGuards(AuthGuard('jwt'))
-  @ApiOperation({ summary: 'Lấy tất cả bài viết đã xuất bản' })
+  @ApiOperation({ summary: 'Lấy tất cả bài viết đã xuất bản (đăng nhập)' })
   @ApiBearerAuth('access-token')
   async getAllBlogs() {
     return this.blogService.getAllBlogs();
+  }
+
+  @Get('public')
+  @Public()
+  @ApiOperation({ summary: 'Lấy tất cả bài viết đã xuất bản cho guest/customer' })
+  async getPublicBlogs() {
+    return this.blogService.getAllPublicBlogs();
   }
 
   @Get('pending')
@@ -44,8 +52,9 @@ export class BlogController {
   }
 
   @Get(':id')
+  @Roles(Role.Staff, Role.Manager, Role.Customer, Role.Consultant)
   @UseGuards(AuthGuard('jwt'))
-  @ApiOperation({ summary: 'Xem chi tiết bài viết theo ID' })
+  @ApiOperation({ summary: 'Xem chi tiết bài viết theo ID (đăng nhập)' })
   @ApiBearerAuth('access-token')
   @ApiParam({ name: 'id', description: 'ID bài viết' })
   async getBlogById(@Param('id') id: string, @Req() req) {
@@ -54,7 +63,16 @@ export class BlogController {
     return this.blogService.getBlogById(id, userId, role);
   }
 
+  @Get('public/:id')
+  @Public()
+  @ApiOperation({ summary: 'Xem chi tiết bài viết công khai theo ID cho guest/customer' })
+  @ApiParam({ name: 'id', description: 'ID bài viết' })
+  async getPublicBlogById(@Param('id') id: string) {
+    return this.blogService.getPublicBlogById(id);
+  }
+
   @Put(':id')
+  @Roles(Role.Staff, Role.Consultant)
   @UseGuards(AuthGuard('jwt'))
   @ApiOperation({ summary: 'Cập nhật bài viết' })
   @ApiBearerAuth('access-token')
@@ -67,6 +85,7 @@ export class BlogController {
   }
 
   @Delete(':id')
+  @Roles(Role.Staff, Role.Consultant)
   @UseGuards(AuthGuard('jwt'))
   @ApiOperation({ summary: 'Xóa bài viết (xóa mềm)' })
   @ApiBearerAuth('access-token')

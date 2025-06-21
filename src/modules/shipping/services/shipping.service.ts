@@ -194,7 +194,7 @@ export class ShippingService {
       // Ghi audit log
       this.prisma.auditLog.create({
         data: {
-          user_id: 'system', // Hoặc lấy staffId nếu có
+          user_id: shippingInfo.appointment.user_id, // Hoặc lấy staffId nếu có
           action: 'UPDATE_SHIPPING_STATUS',
           entity_type: 'ShippingInfo',
           entity_id: shippingInfo.id,

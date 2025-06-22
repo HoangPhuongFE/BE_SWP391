@@ -109,15 +109,15 @@ enum ServiceMode {
 }
 
 enum ShippingStatus {
-  Pending             // Đang chờ gửi hàng
-  Shipped             // Đã gửi đi
-  DeliveredToCustomer // Khách nhận kit
-  PickupRequested     // Khách yêu cầu lấy mẫu
-  SampleInTransit     // Mẫu đang trên đường về
-  SampleCollected     // Đã nhận mẫu tại phòng xét nghiệm
-  ReturnedToLab       // Trả về phòng xét nghiệm (xử lý hoàn thành)
-  Failed              // Lỗi vận chuyển (nếu có)
+  Pending
+  Shipped
+  DeliveredToCustomer
+  PickupRequested
+  SampleInTransit
+  ReturnedToLab
+  Failed
 }
+
 
 // User: Quản lý tài khoản người dùng
 model User {
@@ -276,7 +276,8 @@ model Appointment {
   free_consultation_valid_until DateTime?                  
   payment_refunded              Boolean                    @default(false)
   sample_collected_date         DateTime? 
-  shipping_info                 ShippingInfo?              //  chỉ giữ relation bên này, KHÔNG cần fields/references ở đây
+  shipping_info                 ShippingInfo?              
+  return_shipping_info ReturnShippingInfo?  // Chiều trả mẫu
   mode ServiceMode? 
   @@index([mode])
 }
@@ -285,7 +286,6 @@ model ShippingInfo {
   id                    String        @id @default(uuid()) @db.Char(36)
   appointment_id        String        @unique
   appointment           Appointment   @relation(fields: [appointment_id], references: [appointment_id])
-  
   provider              String
   provider_order_code   String?
   shipping_status       ShippingStatus
@@ -297,8 +297,25 @@ model ShippingInfo {
   ward                  String
   created_at            DateTime      @default(now())
   updated_at            DateTime      @updatedAt
-  @@index([provider_order_code])
 }
+
+model ReturnShippingInfo {
+  id                    String        @id @default(uuid()) @db.Char(36)
+  appointment_id        String        @unique
+  appointment           Appointment   @relation(fields: [appointment_id], references: [appointment_id])
+  provider              String
+  provider_order_code   String?
+  shipping_status         ShippingStatus
+  contact_name          String
+  contact_phone         String
+  pickup_address        String
+  pickup_province       String
+  pickup_district       String
+  pickup_ward           String
+  created_at            DateTime      @default(now())
+  updated_at            DateTime      @updatedAt
+}
+
 
 
 model AppointmentStatusHistory {

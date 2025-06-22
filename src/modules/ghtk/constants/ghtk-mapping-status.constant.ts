@@ -6,9 +6,8 @@ export function mapGhtkStatusToShipping(statusId: number): ShippingStatus {
     case 2: return 'Shipped';
     case 3: return 'DeliveredToCustomer';
     case 4: return 'SampleInTransit';
-    case 5: return 'SampleCollected';
+    case 5: return 'ReturnedToLab'; 
     case 6: return 'Failed';
-    case 7: return 'ReturnedToLab';
     default: return 'Pending';
   }
 }

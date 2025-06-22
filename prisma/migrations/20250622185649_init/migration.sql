@@ -144,7 +144,7 @@ CREATE TABLE `ShippingInfo` (
     `appointment_id` VARCHAR(191) NOT NULL,
     `provider` VARCHAR(191) NOT NULL,
     `provider_order_code` VARCHAR(191) NULL,
-    `shipping_status` ENUM('Pending', 'Shipped', 'DeliveredToCustomer', 'PickupRequested', 'SampleInTransit', 'SampleCollected', 'ReturnedToLab', 'Failed') NOT NULL,
+    `shipping_status` ENUM('Pending', 'Shipped', 'DeliveredToCustomer', 'PickupRequested', 'SampleInTransit', 'ReturnedToLab', 'Failed') NOT NULL,
     `contact_name` VARCHAR(191) NOT NULL,
     `contact_phone` VARCHAR(191) NOT NULL,
     `shipping_address` VARCHAR(191) NOT NULL,
@@ -155,7 +155,26 @@ CREATE TABLE `ShippingInfo` (
     `updated_at` DATETIME(3) NOT NULL,
 
     UNIQUE INDEX `ShippingInfo_appointment_id_key`(`appointment_id`),
-    INDEX `ShippingInfo_provider_order_code_idx`(`provider_order_code`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `ReturnShippingInfo` (
+    `id` CHAR(36) NOT NULL,
+    `appointment_id` VARCHAR(191) NOT NULL,
+    `provider` VARCHAR(191) NOT NULL,
+    `provider_order_code` VARCHAR(191) NULL,
+    `shipping_status` ENUM('Pending', 'Shipped', 'DeliveredToCustomer', 'PickupRequested', 'SampleInTransit', 'ReturnedToLab', 'Failed') NOT NULL,
+    `contact_name` VARCHAR(191) NOT NULL,
+    `contact_phone` VARCHAR(191) NOT NULL,
+    `pickup_address` VARCHAR(191) NOT NULL,
+    `pickup_province` VARCHAR(191) NOT NULL,
+    `pickup_district` VARCHAR(191) NOT NULL,
+    `pickup_ward` VARCHAR(191) NOT NULL,
+    `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updated_at` DATETIME(3) NOT NULL,
+
+    UNIQUE INDEX `ReturnShippingInfo_appointment_id_key`(`appointment_id`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -391,6 +410,9 @@ ALTER TABLE `Appointment` ADD CONSTRAINT `Appointment_schedule_id_fkey` FOREIGN 
 
 -- AddForeignKey
 ALTER TABLE `ShippingInfo` ADD CONSTRAINT `ShippingInfo_appointment_id_fkey` FOREIGN KEY (`appointment_id`) REFERENCES `Appointment`(`appointment_id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `ReturnShippingInfo` ADD CONSTRAINT `ReturnShippingInfo_appointment_id_fkey` FOREIGN KEY (`appointment_id`) REFERENCES `Appointment`(`appointment_id`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `AppointmentStatusHistory` ADD CONSTRAINT `AppointmentStatusHistory_appointment_id_fkey` FOREIGN KEY (`appointment_id`) REFERENCES `Appointment`(`appointment_id`) ON DELETE RESTRICT ON UPDATE CASCADE;

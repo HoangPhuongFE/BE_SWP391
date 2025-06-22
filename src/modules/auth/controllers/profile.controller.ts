@@ -79,4 +79,24 @@ export class ProfileController {
     if (!userId) throw new ForbiddenException('Không thể xác định userId');
     return this.authService.upsertConsultantProfile(userId, dto);
   }
+
+   @Get('customers/all')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(Role.Manager, Role.Staff)
+  @ApiOperation({ summary: 'Lấy tất cả CustomerProfile' })
+  @ApiBearerAuth('access-token')
+  @ApiResponse({ status: 200, description: 'Danh sách tất cả CustomerProfile' })
+  async getAllCustomerProfiles() {
+    return this.authService.getAllCustomerProfiles();
+  }
+
+  @Get('consultants/all')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(Role.Manager, Role.Staff)
+  @ApiOperation({ summary: 'Lấy tất cả ConsultantProfile' })
+  @ApiBearerAuth('access-token')
+  @ApiResponse({ status: 200, description: 'Danh sách tất cả ConsultantProfile' })
+  async getAllConsultantProfiles() {
+    return this.authService.getAllConsultantProfiles();
+  }
 }

@@ -243,4 +243,38 @@ export class AuthService {
       },
     });
   }
+
+  async getAllCustomerProfiles() {
+  return this.prisma.customerProfile.findMany({
+    include: {
+      user: {
+        select: {
+          user_id: true,
+          email: true,
+          full_name: true,
+          role: true,
+          is_verified: true,
+          is_active: true,
+        },
+      },
+    },
+  });
+}
+
+async getAllConsultantProfiles() {
+  return this.prisma.consultantProfile.findMany({
+    include: {
+      user: {
+        select: {
+          user_id: true,
+          email: true,
+          full_name: true,
+          role: true,
+          is_verified: true,
+          is_active: true,
+        },
+      },
+    },
+  });
+}
 }

@@ -69,8 +69,6 @@ export class ServiceController {
    * Lấy danh sách tất cả dịch vụ, có thể lọc theo category và trạng thái hoạt động.
    */
   @Get()
-  @UseGuards(AuthGuard('jwt'))
-  @ApiBearerAuth('access-token')
   @ApiOperation({
     summary: 'Danh sách dịch vụ',
     description: 'Trả về danh sách tất cả dịch vụ chưa bị xoá. Có thể lọc theo danh mục (category) và trạng thái hoạt động (is_active).',

@@ -151,6 +151,8 @@ CREATE TABLE `ShippingInfo` (
     `province` VARCHAR(191) NOT NULL,
     `district` VARCHAR(191) NOT NULL,
     `ward` VARCHAR(191) NOT NULL,
+    `expected_delivery_time` DATETIME(3) NULL,
+    `label_url` VARCHAR(191) NULL,
     `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updated_at` DATETIME(3) NOT NULL,
 
@@ -382,6 +384,19 @@ CREATE TABLE `Schedule` (
     INDEX `Schedule_consultant_id_start_time_idx`(`consultant_id`, `start_time`),
     INDEX `Schedule_service_id_idx`(`service_id`),
     PRIMARY KEY (`schedule_id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `OtpCode` (
+    `id` CHAR(36) NOT NULL,
+    `email` VARCHAR(255) NOT NULL,
+    `code` CHAR(6) NOT NULL,
+    `expiresAt` DATETIME(3) NOT NULL,
+    `isUsed` BOOLEAN NOT NULL DEFAULT false,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+
+    INDEX `OtpCode_email_idx`(`email`),
+    PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- AddForeignKey

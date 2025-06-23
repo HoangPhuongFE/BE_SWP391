@@ -1,113 +1,159 @@
-import { Controller, Post, Patch, Param, Body, UseGuards, Get, Req } from '@nestjs/common';
-import { ShippingService } from '../services/shipping.service';
-import { Roles } from '../../auth/decorators/roles.decorator';
-import { Role } from '@prisma/client';
+import {
+  Controller,
+  Post,
+  Get,
+  Patch,
+  Body,
+  Param,
+  UseGuards,
+  NotFoundException,
+} from '@nestjs/common';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBearerAuth,
+  ApiParam,
+  ApiBody,
+} from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
-import { CreateShippingInfoDto } from '../dtos/create-shipping-info.dto';
+import { ShippingService } from '../services/shipping.service';
+import { Roles } from '@/modules/auth/decorators/roles.decorator';
+import { Role } from '@prisma/client';
 import { UpdateShippingStatusDto } from '../dtos/update-shipping-status.dto';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiParam } from '@nestjs/swagger';
-
-
-
+import { UpdateReturnStatusDto } from '../dtos/update-return-status.dto';
 
 @ApiTags('Shipping')
-@ApiBearerAuth('access-token')
 @Controller('shipping')
 @UseGuards(AuthGuard('jwt'))
+@ApiBearerAuth('access-token')
 export class ShippingController {
-  constructor(private readonly shippingService: ShippingService) {}
+  constructor(private readonly shippingService: ShippingService) { }
+
+  // ========================== OUTBOUND SHIPPING ==========================
 
   /**
-   * STAFF / MANAGER tạo thông tin giao hàng (chiều đi) cho một lịch hẹn tại nhà.
+   * Lấy thông tin vận chuyển chiều đi + chiều về theo appointment.
    */
-  @Post('/appointments/:appointmentId/info')
-  @Roles(Role.Staff, Role.Manager)
+  @Get('appointments/:id')
+  @Roles(Role.Staff, Role.Customer, Role.Manager)
   @ApiOperation({
-    summary: 'Tạo thông tin giao hàng (chiều đi)',
-    description: `Dùng cho STAFF / MANAGER khởi tạo thông tin shipping chiều đi (gửi kit) cho lịch hẹn tại nhà.`,
+    summary: 'Lấy thông tin vận chuyển theo lịch hẹn',
+    description: 'Trả về cả thông tin chiều đi (outbound) và chiều về (return) theo appointmentId.',
   })
-  async createShippingInfo(
-    @Param('appointmentId') appointmentId: string,
-    @Body() dto: CreateShippingInfoDto,
-  ) {
-    return this.shippingService.createShippingInfo(appointmentId, dto);
+  @ApiParam({ name: 'id', description: 'Appointment ID' })
+  async getByAppointment(@Param('id') appointmentId: string) {
+    const info = await this.shippingService.getByAppointmentId(appointmentId);
+    if (!info) throw new NotFoundException('Không tìm thấy thông tin vận chuyển');
+    return info;
   }
 
   /**
-   * STAFF / MANAGER tạo vận đơn thực tế qua GHTK (chiều đi).
+   * Lấy chi tiết đơn chiều đi theo shippingInfo.id
    */
-  @Post('/appointments/:appointmentId/order')
-  @Roles(Role.Staff, Role.Manager)
+  @Get(':id')
+  @Roles(Role.Staff, Role.Customer, Role.Manager)
   @ApiOperation({
-    summary: 'Tạo vận đơn GHTK (chiều đi)',
-    description: `Tạo đơn vận chuyển thật sự với GHTK sau khi đã tạo thông tin giao hàng.`,
+    summary: 'Lấy thông tin đơn chiều đi theo ID',
+    description: 'Trả về chi tiết đơn vận chuyển chiều đi.',
   })
-  async createShippingOrder(@Param('appointmentId') appointmentId: string) {
-    return this.shippingService.createShippingOrder(appointmentId);
+  @ApiParam({ name: 'id', description: 'ShippingInfo ID' })
+  async getByShippingId(@Param('id') id: string) {
+    const info = await this.shippingService.getShippingById(id);
+    if (!info) throw new NotFoundException('Không tìm thấy đơn vận chuyển');
+    return info;
   }
 
   /**
-   * CUSTOMER gửi yêu cầu trả mẫu (chiều về).
+   * Tạo đơn GHN chiều đi cho lịch hẹn.
    */
-  @Post('/appointments/:appointmentId/return')
+  @Post('appointments/:id/order-ghn')
+  @Roles(Role.Staff)
+  @ApiOperation({
+    summary: 'Tạo đơn GHN chiều đi',
+    description: 'Tạo đơn chiều đi từ Lab đến khách hàng cho một lịch hẹn.',
+  })
+  @ApiParam({ name: 'id', description: 'Appointment ID' })
+  async createGhnOrder(@Param('id') appointmentId: string) {
+    const result = await this.shippingService.createOrderForAppointment(appointmentId);
+    if (!result) throw new NotFoundException('Không tìm thấy lịch hẹn hoặc thông tin vận chuyển');
+    return result;
+  }
+
+  /**
+   * Cập nhật trạng thái đơn chiều đi.
+   */
+  @Patch(':id/status')
+  @Roles(Role.Staff, Role.Manager)
+  @ApiOperation({
+    summary: 'Cập nhật trạng thái đơn chiều đi',
+    description: 'Các trạng thái: Pending, Shipped, DeliveredToCustomer, Failed',
+  })
+  @ApiParam({ name: 'id', description: 'ShippingInfo ID' })
+  @ApiBody({ type: UpdateShippingStatusDto })
+  async updateStatus(@Param('id') id: string, @Body() dto: UpdateShippingStatusDto) {
+    return this.shippingService.updateStatus(id, dto.status);
+  }
+
+  // ========================== RETURN REQUEST ==========================
+
+  /**
+   * Customer yêu cầu trả mẫu.
+   */
+  @Post('appointments/:id/return-request')
   @Roles(Role.Customer)
   @ApiOperation({
-    summary: 'Customer gửi yêu cầu trả mẫu (chiều về)',
-    description: `Dùng khi khách hàng muốn trả lại mẫu sau khi đã nhận kit. Hệ thống sẽ tạo thông tin chiều về.`,
+    summary: 'Yêu cầu trả mẫu (PickupRequested)',
+    description: 'Customer yêu cầu trả mẫu → chuyển trạng thái đơn chiều đi sang PickupRequested.',
   })
-  async customerReturnSample(@Param('appointmentId') appointmentId: string) {
-    return this.shippingService.customerReturnSample(appointmentId);
+  @ApiParam({ name: 'id', description: 'Appointment ID' })
+  async requestReturn(@Param('id') appointmentId: string) {
+    return this.shippingService.markReturnRequested(appointmentId);
+  }
+
+  // ========================== RETURN SHIPPING ==========================
+
+  /**
+   * Lấy chi tiết đơn chiều về theo returnShippingInfo.id
+   */
+  @Get('return/:id')
+  @Roles(Role.Staff, Role.Customer, Role.Manager)
+  @ApiOperation({
+    summary: 'Lấy thông tin đơn chiều về theo ID',
+    description: 'Trả về chi tiết đơn chiều về theo returnShippingInfo.id.',
+  })
+  @ApiParam({ name: 'id', description: 'ReturnShippingInfo ID' })
+  async getReturnById(@Param('id') id: string) {
+    const info = await this.shippingService.getReturnShippingById(id);
+    if (!info) throw new NotFoundException('Không tìm thấy đơn chiều về');
+    return info;
   }
 
   /**
-   * STAFF / MANAGER cập nhật trạng thái chiều đi.
+   * Tạo đơn GHN chiều về.
    */
-  @Patch('/:shippingInfoId/status')
+  @Post('appointments/:id/order-ghn-return')
   @Roles(Role.Staff, Role.Manager)
   @ApiOperation({
-    summary: 'Cập nhật trạng thái chiều đi',
-    description: `Trạng thái hợp lệ:
-    - Pending → Shipped
-    - Shipped → DeliveredToCustomer
-    Không hỗ trợ nhảy lùi hoặc bỏ bước.`,
+    summary: 'Tạo đơn GHN chiều về',
+    description: 'Tạo đơn chiều về từ khách hàng về Lab sau khi có yêu cầu trả mẫu.',
   })
-  async updateShippingStatusById(
-    @Param('shippingInfoId') shippingInfoId: string,
-    @Body() dto: UpdateShippingStatusDto,
-  ) {
-    return this.shippingService.updateShippingStatusById(shippingInfoId, dto);
+  @ApiParam({ name: 'id', description: 'Appointment ID' })
+  async createGhnReturnOrder(@Param('id') appointmentId: string) {
+    return this.shippingService.createReturnOrderForAppointment(appointmentId);
   }
 
   /**
-   * STAFF / MANAGER cập nhật trạng thái chiều về.
+   * Cập nhật trạng thái đơn chiều về.
    */
-  @Patch('/return/:returnShippingInfoId/status')
+  @Patch('return/:id/status')
   @Roles(Role.Staff, Role.Manager)
   @ApiOperation({
-    summary: 'Cập nhật trạng thái chiều về',
-    description: `Trạng thái hợp lệ:
-    - PickupRequested → SampleInTransit
-    - SampleInTransit → ReturnedToLab
-    
-    Không dùng các trạng thái như 'Shipped', 'DeliveredToCustomer' ở chiều về.`,
+    summary: 'Cập nhật trạng thái đơn chiều về',
+    description: 'Các trạng thái: SampleInTransit, ReturnedToLab, Failed',
   })
-  async updateReturnShippingStatusById(
-    @Param('returnShippingInfoId') returnShippingInfoId: string,
-    @Body() dto: UpdateShippingStatusDto,
-  ) {
-    return this.shippingService.updateReturnShippingStatusById(returnShippingInfoId, dto);
-  }
-
-  /**
-   * STAFF / MANAGER / CUSTOMER lấy thông tin vận chuyển chiều đi và chiều về theo appointment.
-   */
-  @Get('/appointments/:appointmentId/shipping')
-  @Roles(Role.Staff, Role.Manager, Role.Customer)
-  @ApiOperation({
-    summary: 'Lấy thông tin vận chuyển (chiều đi + chiều về)',
-    description: `Trả về đầy đủ thông tin vận chuyển của cả chiều gửi kit và chiều trả mẫu, nếu có.`,
-  })
-  async getShippingInfo(@Param('appointmentId') appointmentId: string) {
-    return this.shippingService.getShippingInfoByAppointmentId(appointmentId);
+  @ApiParam({ name: 'id', description: 'ReturnShippingInfo ID' })
+  @ApiBody({ type: UpdateReturnStatusDto })
+  async updateReturnStatus(@Param('id') id: string, @Body() dto: UpdateReturnStatusDto) {
+    return this.shippingService.updateReturnStatus(id, dto.status);
   }
 }

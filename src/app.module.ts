@@ -12,8 +12,9 @@ import { PrismaModule } from './prisma/prisma.module';
 import { EmailModule } from './modules/email/email.module';
 import { BlogModule } from './modules/blog/blog.module';
 import { BlogCommentModule } from './modules/blog-comment/blog-comment.module';
-import { GhtkModule } from './modules/ghtk/ghtk.module';
-import { ShippingModule } from './modules/shipping/shipping.module';
+import { ShippingModule } from './modules/shipping/shipping.module'
+
+
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
@@ -28,7 +29,6 @@ import { ShippingModule } from './modules/shipping/shipping.module';
     EmailModule,
     BlogModule,
     BlogCommentModule,
-    GhtkModule,
     ShippingModule,
   ],
 })

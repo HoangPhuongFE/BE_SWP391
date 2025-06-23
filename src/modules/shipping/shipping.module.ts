@@ -1,14 +1,13 @@
-import { Module } from '@nestjs/common';
-import { PrismaService } from '../../database/prisma.service';
-import { ShippingService } from './services/shipping.service';
-import { ShippingController } from './controllers/shipping.controller';
-import { GhtkService } from '../ghtk/services/ghtk.service';
-import { HttpModule } from '@nestjs/axios';
-import { ConfigModule } from '@nestjs/config';
-
+import { Module } from '@nestjs/common'
+import { HttpModule } from '@nestjs/axios'
+import { ShippingController } from '../shipping/controllers/shipping.controller'
+import { GhnService } from '../shipping/services/ghn.service'
+import { ShippingService } from '../shipping/services/shipping.service'
+import { PrismaModule } from '@/prisma/prisma.module' 
 @Module({
-  imports: [HttpModule, ConfigModule],
-  providers: [PrismaService, ShippingService, GhtkService],
+  imports: [HttpModule, PrismaModule],
   controllers: [ShippingController],
+  providers: [GhnService, ShippingService],
+  exports: [ShippingService],
 })
 export class ShippingModule {}

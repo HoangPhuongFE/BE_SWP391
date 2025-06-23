@@ -283,21 +283,27 @@ model Appointment {
 }
 
 model ShippingInfo {
-  id                    String        @id @default(uuid()) @db.Char(36)
-  appointment_id        String        @unique
-  appointment           Appointment   @relation(fields: [appointment_id], references: [appointment_id])
-  provider              String
-  provider_order_code   String?
-  shipping_status       ShippingStatus
-  contact_name          String
-  contact_phone         String
-  shipping_address      String
-  province              String
-  district              String
-  ward                  String
-  created_at            DateTime      @default(now())
-  updated_at            DateTime      @updatedAt
+  id                   String           @id @default(uuid()) @db.Char(36)
+  appointment_id       String           @unique
+  appointment          Appointment      @relation(fields: [appointment_id], references: [appointment_id])
+  provider             String           // 'GHN'
+  provider_order_code  String?          // order_code trả về từ GHN
+  shipping_status      ShippingStatus
+
+  contact_name         String
+  contact_phone        String
+  shipping_address     String           // Số nhà, tên đường
+  province             String
+  district             String
+  ward                 String
+
+  expected_delivery_time DateTime?      // ← GHN trả về
+  label_url            String?          // ← GHN trả về (link PDF)
+  
+  created_at           DateTime         @default(now())
+  updated_at           DateTime         @updatedAt
 }
+
 
 model ReturnShippingInfo {
   id                    String        @id @default(uuid()) @db.Char(36)

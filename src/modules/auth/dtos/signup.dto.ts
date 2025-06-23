@@ -14,4 +14,8 @@ export class SignupDto {
   @ApiProperty({ example: 'Nguyen Van A' })
   @IsString()
   fullName: string;
+
+  @ApiProperty({ example: '123456' })
+  @IsString()
+  otpCode: string;
 }

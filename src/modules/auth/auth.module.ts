@@ -8,6 +8,7 @@ import { ProfileController } from './controllers/profile.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { LocalStrategy } from './strategies/local.strategy';
 import { GoogleStrategy } from './strategies/google.strategy';
+import { EmailModule } from '@/modules/email/email.module'; 
 import { PrismaModule } from '@/prisma/prisma.module';
 import { RolesGuard } from './guards/roles.guard';
 
@@ -24,6 +25,7 @@ import { RolesGuard } from './guards/roles.guard';
       }),
     }),
     PrismaModule,
+    EmailModule, 
   ],
   controllers: [AuthController, ProfileController],
   providers: [

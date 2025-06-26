@@ -50,48 +50,81 @@ export class AppointmentService {
     return validTransitions[current].includes(next);
   }
 
+  /**
+ * Tạo lịch hẹn tư vấn với Consultant.
+ * Kiểm tra lịch trống, dịch vụ, Consultant, và quyền tư vấn miễn phí (nếu cung cấp test_code).
+ * Nếu hợp lệ và miễn phí, đánh dấu is_free_consultation = true và không tạo thanh toán.
+ * Nếu không miễn phí, tạo link thanh toán.
+ * @param dto Dữ liệu đầu vào bao gồm test_code để kiểm tra tư vấn miễn phí
+ * @returns Lịch hẹn đã tạo và link thanh toán (nếu có)
+ */
   async createAppointment(dto: CreateAppointmentDto & { userId: string }) {
-    const { consultant_id, schedule_id, service_id, type, location, userId, related_appointment_id } = dto;
+    const { consultant_id, schedule_id, service_id, type, location, userId, test_code } = dto;
 
+    // Kiểm tra lịch trống
     const schedule = await this.prisma.schedule.findUnique({
       where: { schedule_id, is_booked: false, deleted_at: null },
     });
     if (!schedule) throw new BadRequestException('Lịch trống không tồn tại hoặc đã được đặt');
 
+    // Kiểm tra dịch vụ
     const svc = await this.prisma.service.findUnique({
       where: { service_id, deleted_at: null },
     });
     if (!svc || svc.type !== ServiceType.Consultation) throw new BadRequestException('Dịch vụ không hợp lệ');
 
+    // Kiểm tra tư vấn viên (nếu có)
     if (consultant_id) {
       const consultant = await this.prisma.consultantProfile.findUnique({ where: { consultant_id } });
       if (!consultant || consultant.consultant_id !== schedule.consultant_id) throw new BadRequestException('Consultant không hợp lệ');
     }
 
+    // Kiểm tra trùng lịch
     const overlap = await this.prisma.appointment.findFirst({
-      where: { consultant_id: schedule.consultant_id, start_time: { lte: schedule.end_time }, end_time: { gte: schedule.start_time }, status: { not: 'Cancelled' } },
+      where: {
+        consultant_id: schedule.consultant_id,
+        start_time: { lte: schedule.end_time },
+        end_time: { gte: schedule.start_time },
+        status: { not: 'Cancelled' },
+      },
     });
     if (overlap) throw new BadRequestException('Thời gian trùng lịch hẹn khác');
 
+    // Kiểm tra tư vấn miễn phí với test_code
     let isFreeConsultation = false;
     let paymentAmount = Number(svc.price);
-    if (related_appointment_id) {
-      const relatedAppt = await this.prisma.appointment.findUnique({ where: { appointment_id: related_appointment_id } });
-      if (relatedAppt && relatedAppt.user_id === userId && relatedAppt.type === 'Testing' && relatedAppt.status === 'Completed' && !relatedAppt.deleted_at) {
+    let related_appointment_id: string | undefined;
+    if (test_code) {
+      const testResult = await this.prisma.testResult.findUnique({
+        where: { test_code },
+        include: { appointment: true },
+      });
+      if (!testResult || !testResult.appointment) {
+        throw new BadRequestException('Mã xét nghiệm không hợp lệ');
+      }
+      const relatedAppt = testResult.appointment;
+      if (
+        relatedAppt.user_id === userId &&
+        relatedAppt.type === 'Testing' &&
+        relatedAppt.status === 'Completed' &&
+        !relatedAppt.deleted_at
+      ) {
         const freeConsults = await this.prisma.appointment.count({
-          where: { related_appointment_id, is_free_consultation: true, deleted_at: null },
+          where: { related_appointment_id: relatedAppt.appointment_id, is_free_consultation: true, deleted_at: null },
         });
         if (freeConsults < 1 && relatedAppt.free_consultation_valid_until && new Date() <= relatedAppt.free_consultation_valid_until) {
           isFreeConsultation = true;
           paymentAmount = 0;
+          related_appointment_id = relatedAppt.appointment_id;
         } else {
-          throw new BadRequestException('ID xét nghiệm không hợp lệ hoặc đã hết hạn miễn phí');
+          throw new BadRequestException('Mã xét nghiệm không hợp lệ hoặc đã hết hạn miễn phí');
         }
       } else {
-        throw new BadRequestException('ID xét nghiệm không hợp lệ');
+        throw new BadRequestException('Mã xét nghiệm không hợp lệ');
       }
     }
 
+    // Tạo lịch hẹn
     const appt = await this.prisma.appointment.create({
       data: {
         user_id: userId,
@@ -105,9 +138,11 @@ export class AppointmentService {
         service_id,
         schedule_id,
         is_free_consultation: isFreeConsultation,
+        related_appointment_id,
       },
     });
 
+    // Ghi lịch sử trạng thái
     await this.prisma.appointmentStatusHistory.create({
       data: {
         appointment_id: appt.appointment_id,
@@ -117,8 +152,10 @@ export class AppointmentService {
       },
     });
 
+    // Cập nhật trạng thái lịch
     await this.prisma.schedule.update({ where: { schedule_id }, data: { is_booked: true } });
 
+    // Tạo thanh toán nếu không miễn phí
     if (!isFreeConsultation) {
       let orderCode: number | null = null;
       for (let i = 0; i < 3; i++) {
@@ -772,20 +809,50 @@ export class AppointmentService {
     return { feedback, message: 'Gửi feedback thành công' };
   }
 
-  async validateRelatedAppointment(appointmentId: string, userId: string) {
-    const appointment = await this.prisma.appointment.findUnique({
-      where: { appointment_id: appointmentId, deleted_at: null },
+
+  
+  
+  async validateTestCode(testCode: string, userId: string) {
+    const testResult = await this.prisma.testResult.findUnique({
+      where: { test_code: testCode },
+      include: { appointment: true },
     });
-    if (!appointment || appointment.user_id !== userId || appointment.type !== 'Testing' || appointment.status !== 'Completed') {
-      return { valid: false, message: 'ID xét nghiệm không hợp lệ' };
+
+    if (!testResult || !testResult.appointment) {
+      return { valid: false, message: 'Mã xét nghiệm không tồn tại' };
     }
+
+    const appointment = testResult.appointment;
+    if (appointment.user_id !== userId) {
+      return { valid: false, message: 'Mã xét nghiệm không thuộc về bạn' };
+    }
+    if (appointment.type !== 'Testing') {
+      return { valid: false, message: 'Mã xét nghiệm không liên quan đến lịch xét nghiệm' };
+    }
+    if (appointment.status !== 'Completed') {
+      return { valid: false, message: 'Lịch xét nghiệm chưa hoàn tất' };
+    }
+    if (appointment.deleted_at) {
+      return { valid: false, message: 'Lịch xét nghiệm đã bị xóa' };
+    }
+
     const freeConsults = await this.prisma.appointment.count({
-      where: { related_appointment_id: appointmentId, is_free_consultation: true, deleted_at: null },
+      where: {
+        related_appointment_id: appointment.appointment_id,
+        is_free_consultation: true,
+        deleted_at: null,
+      },
     });
-    if (freeConsults >= 1 || (appointment.free_consultation_valid_until && new Date() > appointment.free_consultation_valid_until)) {
-      return { valid: false, message: 'Đã sử dụng miễn phí hoặc hết hạn' };
+
+    if (freeConsults >= 1) {
+      return { valid: false, message: 'Mã xét nghiệm đã được sử dụng cho tư vấn miễn phí' };
     }
-    return { valid: true, message: 'Bạn đủ điều kiện miễn phí tư vấn' };
+
+    if (appointment.free_consultation_valid_until && new Date() > appointment.free_consultation_valid_until) {
+      return { valid: false, message: 'Mã xét nghiệm đã hết hạn tư vấn miễn phí' };
+    }
+
+    return { valid: true, message: 'Bạn đủ điều kiện nhận tư vấn miễn phí' };
   }
 
 

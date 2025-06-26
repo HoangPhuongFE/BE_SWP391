@@ -41,7 +41,7 @@ export class AppointmentController {
     description: `
 Tạo một lịch hẹn tư vấn với Consultant. Hệ thống sẽ kiểm tra lịch trống, dịch vụ, Consultant và quyền miễn phí nếu có. Nếu hợp lệ sẽ tạo lịch hẹn miễn phí. Nếu không, hệ thống sẽ trả về link thanh toán.
 
-Để được miễn phí, khách hàng phải hoàn tất một lịch xét nghiệm (Testing) trong vòng 30 ngày, chưa từng sử dụng quyền miễn phí từ lịch đó. Gửi ID lịch xét nghiệm thông qua related_appointment_id.`
+Để được miễn phí, khách hàng phải hoàn tất một lịch xét nghiệm (Testing) trong vòng 30 ngày, chưa từng sử dụng quyền miễn phí từ lịch đó. Gửi ID lịch xét nghiệm thông qua test_code trong body. Hệ thống sẽ kiểm tra mã này và nếu hợp lệ, sẽ tạo lịch hẹn tư vấn miễn phí mà không cần thanh toán.`
   })
   @ApiBearerAuth('access-token')
   @ApiBody({
@@ -53,7 +53,7 @@ Body gồm:
 - consultant_id: ID chuyên gia (tùy chọn, phải trùng với lịch)
 - location: địa điểm nếu offline (tùy chọn)
 - type: luôn là 'Consultation'
-- related_appointment_id: ID lịch xét nghiệm (nếu yêu cầu miễn phí)`
+- test_code: mã xét nghiệm (tùy chọn, nếu có sẽ kiểm tra quyền miễn phí)`
   })
   async createAppointment(@Body() dto: CreateAppointmentDto, @Req() req) {
     const userId = (req.user as any).userId;
@@ -194,22 +194,31 @@ Khách hàng gửi đánh giá sau khi hoàn tất lịch hẹn tư vấn. Hệ 
     return this.appointmentService.submitFeedback(appointmentId, dto, userId);
   }
 
-  @Get('validate-related/:appointmentId')
+
+  @Get('validate-test-code/:testCode')
   @Roles(Role.Customer)
   @UseGuards(AuthGuard('jwt'))
   @ApiOperation({
-    summary: 'Kiểm tra điều kiện miễn phí tư vấn',
+    summary: 'Kiểm tra mã xét nghiệm cho tư vấn miễn phí',
     description: `
-Kiểm tra lịch xét nghiệm có đủ điều kiện miễn phí tư vấn: hoàn tất, chưa dùng, còn hạn.`
+Kiểm tra xem mã xét nghiệm (test_code) có đủ điều kiện để đặt lịch tư vấn miễn phí hay không.  
+Điều kiện:  
+- Mã xét nghiệm thuộc lịch hẹn xét nghiệm (type = 'Testing').  
+- Lịch hẹn đã hoàn tất (status = 'Completed').  
+- Chưa từng sử dụng để đặt tư vấn miễn phí.  
+- Còn trong thời hạn miễn phí (thường 30 ngày kể từ khi hoàn tất).  
+
+Frontend nên gọi API này trước khi gửi yêu cầu tạo lịch hẹn với test_code.  
+Trả về:  
+- { valid: true, message: 'Bạn đủ điều kiện nhận tư vấn miễn phí' } nếu hợp lệ.  
+- { valid: false, message: ... } nếu không hợp lệ (mã không tồn tại, đã sử dụng, hoặc hết hạn).
+    `,
   })
   @ApiBearerAuth('access-token')
-  @ApiParam({ name: 'appointmentId', description: 'ID lịch xét nghiệm', type: String })
-  async validateRelatedAppointment(
-    @Param('appointmentId') appointmentId: string,
-    @Req() req,
-  ) {
+  @ApiParam({ name: 'testCode', description: 'Mã xét nghiệm từ kết quả xét nghiệm (ví dụ: STI-12345)', type: String })
+  async validateTestCode(@Param('testCode') testCode: string, @Req() req) {
     const userId = (req.user as any).userId;
-    return this.appointmentService.validateRelatedAppointment(appointmentId, userId);
+    return this.appointmentService.validateTestCode(testCode, userId);
   }
 
   @Get('my-appointments')
@@ -231,7 +240,7 @@ Trả về toàn bộ lịch hẹn của người dùng bao gồm thông tin d�
   @Roles(Role.Staff, Role.Manager)
   @UseGuards(AuthGuard('jwt'))
   @ApiOperation({
-    summary: 'Xem lịch hẹn chờ xác nhận',
+    summary: 'Xem lịch hẹn chờ xác nhận GIÀNH CHO Staff, Manager',
     description: `
 Trả về danh sách lịch hẹn đang ở trạng thái Pending dành cho Staff, Manager xác nhận.`
   })

@@ -26,32 +26,33 @@ export class CreateAppointmentDto {
   location?: string;
 
   @ApiPropertyOptional({
-    example: '123e4567-e89b-12d3-a456-426614174000',
+    example: 'STI-12345',
     description: `
-ID của lịch hẹn **xét nghiệm** đã hoàn tất, để yêu cầu được **tư vấn miễn phí**.
+Mã xét nghiệm (**test_code**) từ kết quả xét nghiệm đã hoàn tất, để yêu cầu được **tư vấn miễn phí**.
 
- **Chỉ áp dụng nếu:**
-- Đây là lịch xét nghiệm (type = 'Testing')
-- Trạng thái = 'Completed'
+**Chỉ áp dụng nếu:**
+- Mã xét nghiệm thuộc lịch hẹn xét nghiệm (type = 'Testing')
+- Lịch hẹn xét nghiệm có trạng thái = 'Completed'
 - Chưa từng sử dụng để đặt tư vấn miễn phí
 - Còn hiệu lực trong vòng 30 ngày kể từ khi hoàn tất
 
- **Cách kiểm tra trên FE**:
+**Cách kiểm tra trên FE**:
 Gọi API:
-  \`GET /appointments/validate-related/:appointmentId\`
+  \`GET /appointments/validate-test-code/:testCode\`
 
 Nếu trả về:
-  \`{ "valid": true }\` ⇒ Gắn ID xét nghiệm đó vào đây để được miễn phí tư vấn
- Nếu hợp lệ:
+  \`{ "valid": true }\` ⇒ Gắn mã xét nghiệm đó vào đây để được miễn phí tư vấn
+
+Nếu hợp lệ:
 - Hệ thống sẽ đánh dấu \`is_free_consultation = true\`
 - Không tạo thanh toán
 - Lịch tư vấn sẽ miễn phí và chờ xác nhận từ hệ thống
 
- Nếu không hợp lệ:
-- Backend sẽ trả lỗi 400: "ID xét nghiệm không hợp lệ hoặc đã hết hạn miễn phí"
+Nếu không hợp lệ:
+- Backend sẽ trả lỗi 400: "Mã xét nghiệm không hợp lệ hoặc đã hết hạn miễn phí"
     `
   })
   @IsString()
   @IsOptional()
-  related_appointment_id?: string;
+  test_code?: string;
 }

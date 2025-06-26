@@ -1,4 +1,5 @@
-import { PrismaClient, Role, Gender, AppointmentType, AppointmentStatus, PaymentStatus, TestResultStatus, FeedbackStatus, QuestionStatus, ServiceType, ServiceMode, ShippingStatus, PaymentMethod, PaymentTransactionStatus, NotificationType, NotificationStatus, Prisma } from '@prisma/client'; import * as bcrypt from 'bcrypt';
+import { PrismaClient, Role, Gender, AppointmentType, AppointmentStatus, PaymentStatus, TestResultStatus, FeedbackStatus, QuestionStatus, ServiceType, ServiceMode, ShippingStatus, PaymentMethod, PaymentTransactionStatus, NotificationType, NotificationStatus, Prisma } from '@prisma/client';
+import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
 
@@ -33,6 +34,24 @@ async function main() {
       },
     });
   }
+
+  // System User (cố định)
+  const systemUserId = '550e8400-e29b-41d4-a716-446655440000'; // UUID cố định
+  await prisma.user.upsert({
+    where: { user_id: systemUserId },
+    update: {},
+    create: {
+      user_id: systemUserId,
+      email: 'system@yourapp.com',
+      password_hash: hashedPassword,
+      role: Role.System, 
+      full_name: 'System User',
+      phone_number: '0909999999',
+      address: 'System Address, TP.HCM',
+      is_verified: true,
+      is_active: true,
+    },
+  });
 
   // Consultants + ConsultantProfile
   for (const email of consultantEmails) {
@@ -216,7 +235,7 @@ async function main() {
   const consultationServices = await prisma.service.findMany({ where: { type: ServiceType.Consultation } });
   for (const consultant of consultants) {
     for (let i = 0; i < 5; i++) {
-      const startTime = new Date(2025, 6, 21 + i, 9 + i % 4, 0);
+      const startTime = new Date(2025, 6, 21 + i, 9 + i % 4, 0); // Tháng 6 (0-based: 6 là tháng 7)
       const endTime = new Date(startTime.getTime() + 60 * 60 * 1000);
       const service = consultationServices[Math.floor(Math.random() * consultationServices.length)];
 
@@ -244,6 +263,7 @@ async function main() {
       }
     }
   }
+
   // Appointments with varied statuses, including free consultations
   const appointmentStatuses: AppointmentStatus[] = ['Pending', 'Confirmed', 'SampleCollected', 'Completed', 'Cancelled'];
   const customers = await prisma.user.findMany({ where: { role: Role.Customer } });
@@ -258,7 +278,7 @@ async function main() {
     const startTime = new Date(2025, 6, 21 + i % 10, 9 + (i % 4), 0);
 
     // Testing Appointments
-    const appointment = await prisma.appointment.create({ // Thay upsert bằng create
+    const appointment = await prisma.appointment.create({
       data: {
         user_id: customer.user_id,
         consultant_id: null,
@@ -276,6 +296,7 @@ async function main() {
         free_consultation_valid_until: status === 'Completed' ? new Date(2025, 7, 21 + i % 10) : null,
       },
     });
+
     // Payment for Testing appointments
     if (status !== 'Cancelled') {
       let orderCode: number | undefined = undefined;
@@ -306,6 +327,7 @@ async function main() {
         },
       });
     }
+
     // ShippingInfo for Testing AT_HOME
     if (appointment.mode === ServiceMode.AT_HOME && status !== 'Cancelled') {
       await prisma.shippingInfo.upsert({
@@ -329,7 +351,7 @@ async function main() {
     // TestResult for Testing
     if (status === 'SampleCollected' || status === 'Completed') {
       const testResult = await prisma.testResult.upsert({
-        where: { test_code: `TEST${1000 + i}` }, // Sử dụng test_code (unique) thay vì result_id
+        where: { test_code: `TEST${1000 + i}` },
         update: {},
         create: {
           test_code: `TEST${1000 + i}`,
@@ -363,7 +385,7 @@ async function main() {
       if (status === 'SampleCollected' || status === 'Completed') {
         await prisma.testResultStatusHistory.create({
           data: {
-            result_id: testResult.result_id, // Sử dụng result_id từ bản ghi vừa tạo
+            result_id: testResult.result_id,
             status: status === 'Completed' ? TestResultStatus.Completed : TestResultStatus.Processing,
             notes: `TestResult: ${status}`,
             changed_by: customer.user_id,
@@ -404,7 +426,7 @@ async function main() {
       const consultant = consultants[Math.floor(Math.random() * consultants.length)];
       const service = servicesCreated.filter(s => s.type === ServiceType.Consultation)[Math.floor(Math.random() * 3)];
       const status = appointmentStatuses[Math.floor(Math.random() * appointmentStatuses.length)];
-      const startTime = new Date(2025, 6, 17 + i % 10, 9 + (i % 4), 0); // Sửa tháng 6 thành 5 (0-based)
+      const startTime = new Date(2025, 6, 17 + i % 10, 9 + (i % 4), 0); // Tháng 6 (0-based: 6 là tháng 7)
       const isFree = i < 3 && testingAppointments.length > i;
       const relatedAppt = isFree ? testingAppointments[i] : null;
 
@@ -499,7 +521,7 @@ async function main() {
       await prisma.auditLog.create({
         data: {
           user_id: customer.user_id,
-          action: 'CREATE_CONSULTATION_APPOINTMENT', // Sửa từ CREATE_TESTING_APPOINTMENT
+          action: 'CREATE_CONSULTATION_APPOINTMENT',
           entity_type: 'Appointment',
           entity_id: appointment.appointment_id,
           details: { status, service: service.name, isFree },
@@ -552,14 +574,14 @@ async function main() {
       });
     }
 
-    console.log('Chạy được rồi "Cạp Cạp"');
+      console.log('Chạy được rồi "Cạp Cạp"');
+    }
+  
   }
-
-}
-
-main()
-  .catch((e) => {
-    console.error('Lỗi khi seed:', e);
-    process.exit(1);
-  })
-  .finally(() => prisma.$disconnect());
+  
+  main()
+    .catch((e) => {
+      console.error('Lỗi khi seed:', e);
+      process.exit(1);
+    })
+    .finally(() => prisma.$disconnect());

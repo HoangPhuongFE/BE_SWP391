@@ -15,8 +15,8 @@ export class PaymentService {
     private readonly prisma: PrismaService,
   ) {
     const clientId = this.config.get<string>('PAYOS_CLIENT_ID');
-    const apiKey   = this.config.get<string>('PAYOS_API_KEY');
-    const ckKey    = this.config.get<string>('PAYOS_CHECKSUM_KEY');
+    const apiKey = this.config.get<string>('PAYOS_API_KEY');
+    const ckKey = this.config.get<string>('PAYOS_CHECKSUM_KEY');
     if (!clientId || !apiKey || !ckKey) {
       throw new BadRequestException('Thiếu cấu hình PayOS');
     }
@@ -24,18 +24,18 @@ export class PaymentService {
   }
 
   /** Tạo link + lưu Payment (Pending) */
-  async createPaymentLink(userId: string, dto: CreatePaymentDto) {
+ async createPaymentLink(userId: string, dto: CreatePaymentDto) {
     let linkData;
     try {
       linkData = await this.payos.createPaymentLink({
-        orderCode:   dto.orderCode,
-        amount:      dto.amount,
+        orderCode: dto.orderCode,
+        amount: dto.amount,
         description: dto.description,
-        cancelUrl:   dto.cancelUrl,
-        returnUrl:   dto.returnUrl,
-        buyerName:   dto.buyerName,
-        buyerEmail:  dto.buyerEmail,
-        buyerPhone:  dto.buyerPhone,
+        cancelUrl: dto.cancelUrl,
+        returnUrl: dto.returnUrl,
+        buyerName: dto.buyerName,
+        buyerEmail: dto.buyerEmail,
+        buyerPhone: dto.buyerPhone,
       });
     } catch (err) {
       this.logger.error('Tạo link PayOS lỗi:', err);
@@ -45,31 +45,34 @@ export class PaymentService {
     try {
       await this.prisma.payment.create({
         data: {
-          user_id:        userId,
+          payment_id: crypto.randomUUID(), // Tự sinh UUID nếu cần
+          user_id: userId,
           appointment_id: dto.appointmentId,
-          order_code:     dto.orderCode,
-          amount:         dto.amount,
+          order_code: dto.orderCode,
+          amount: dto.amount,
           payment_method: dto.paymentMethod,
-          status:         'Pending',
+          status: 'Pending',
+          expires_at: new Date(Date.now() + 30 * 60 * 1000), // 30 phút
         },
       });
     } catch (err) {
       this.logger.error('Lưu Payment vào DB lỗi:', err);
+      throw new BadRequestException('Lưu thanh toán thất bại');
     }
 
-    return { paymentLink: linkData, message: 'OK' };
+    return { paymentLink: linkData.checkoutUrl, message: 'OK' }; // Sửa thành checkoutUrl nếu đúng
   }
 
   /** Xử lý callback từ PayOS */
   async processPaymentCallback(payload: any) {
     this.logger.log('Callback payload:', JSON.stringify(payload));
 
-    const raw       = payload.data?.orderCode ?? payload.data?.order_code;
+    const raw = payload.data?.orderCode ?? payload.data?.order_code;
     const orderCode = Number(raw);
     if (isNaN(orderCode)) return;
 
     const payment = await this.prisma.payment.findUnique({
-      where:   { order_code: orderCode },
+      where: { order_code: orderCode },
       include: { appointment: true },
     });
     if (!payment) {
@@ -86,14 +89,14 @@ export class PaymentService {
     // Cập nhật payment.status
     await this.prisma.payment.update({
       where: { order_code: orderCode },
-      data:  { status: isSuccess ? 'Completed' : 'Failed' },
+      data: { status: isSuccess ? 'Completed' : 'Failed' },
     });
 
     // Nếu thành công, chỉ update appointment.payment_status
     if (isSuccess) {
       await this.prisma.appointment.update({
         where: { appointment_id: payment.appointment_id },
-        data:  { payment_status: 'Paid' },
+        data: { payment_status: 'Paid' },
       });
       this.logger.log(`Payment success orderCode=${orderCode}, appointment.payment_status=Paid`);
     } else {

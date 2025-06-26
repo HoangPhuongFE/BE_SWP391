@@ -15,6 +15,7 @@ enum Role {
   Staff
   Manager
   Admin
+  System
 }
 
 enum Gender {
@@ -96,6 +97,7 @@ enum PaymentTransactionStatus {
   Completed
   Failed
   Refunded
+  Cancelled
 }
 
 enum ServiceType {
@@ -504,7 +506,7 @@ model Payment {
   order_code     Int                      @unique
   created_at     DateTime                 @default(now())
   updated_at     DateTime                 @updatedAt
-
+  expires_at     DateTime?
   @@index([appointment_id, status])
   @@index([user_id, status])
 }

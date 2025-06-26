@@ -155,7 +155,7 @@ export class AuthController {
   @ApiBody({ type: ChangeRoleDto })
   @ApiResponse({ status: 200, description: 'Vai trò đã được thay đổi thành công' })
   @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Roles(Role.Manager)
+  @Roles(Role.Manager , Role.Admin) 
   async changeRole(@Req() req: Request & { user?: JwtPayload }, @Body() dto: ChangeRoleDto) {
     console.log('AuthController - req.user:', req.user);
     const managerId = req.user?.sub;

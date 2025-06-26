@@ -199,6 +199,14 @@ export class AuthController {
     await this.authService.resetPasswordWithOtp(dto.email, dto.otpCode, dto.newPassword);
     return { message: 'Mật khẩu đã được đặt lại thành công' };
   }
+  @Get('users')
+  @ApiOperation({ summary: 'Lấy danh sách toàn bộ người dùng (với hồ sơ nếu có)' })
+  @ApiBearerAuth('access-token')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(Role.Manager, Role.Admin)
+  async getAllUsers() {
+    return this.authService.getAllUsersWithProfiles();
+  }
 
 }
 

@@ -1,5 +1,5 @@
 // src/modules/services/dtos/create-service.dto.ts
-import { IsString, IsNumber, IsBoolean, IsOptional, IsEnum, Min, IsArray } from 'class-validator';
+import { IsString, IsNumber, IsBoolean, IsOptional, IsEnum, Min, IsArray, IsInt } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 
@@ -56,4 +56,12 @@ export class CreateServiceDto {
   @IsString()
   @IsOptional()
   return_phone?: string;
+
+  @ApiPropertyOptional({ example: 20, description: 'Số lượng lịch hẹn tối đa mỗi ngày' })
+  @IsInt()
+  @Min(0)
+  @IsOptional()
+  daily_capacity?: number;
+
+
 }

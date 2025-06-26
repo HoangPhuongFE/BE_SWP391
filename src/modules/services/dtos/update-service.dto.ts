@@ -1,5 +1,5 @@
 // src/modules/services/dtos/update-service.dto.ts
-import { IsString, IsNumber, IsBoolean, IsOptional, IsEnum, Min, IsArray } from 'class-validator';
+import { IsString, IsNumber, IsBoolean, IsOptional, IsEnum, Min, IsArray, IsInt } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import { ServiceType } from '@prisma/client';
@@ -52,4 +52,10 @@ export class UpdateServiceDto {
   @IsString()
   @IsOptional()
   return_phone?: string;
+
+  @ApiPropertyOptional({ example: 20, description: 'Số lượng lịch hẹn tối đa mỗi ngày' })
+  @IsInt()
+  @Min(0)
+  @IsOptional()
+  daily_capacity?: number;
 }

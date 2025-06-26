@@ -23,30 +23,50 @@ export class ServiceService {
       return_address,
       return_phone,
       available_modes,
+      daily_capacity,
     } = dto;
 
+    // Thu thập lỗi
+    const errors: { field: string; message: string }[] = [];
+
+    // Kiểm tra dịch vụ đã tồn tại
     const existing = await this.prisma.service.findFirst({
       where: { category, name, deleted_at: null },
     });
     if (existing) {
-      throw new BadRequestException('Danh mục và tên dịch vụ đã tồn tại');
+      errors.push({ field: 'name', message: `Dịch vụ với danh mục '${category}' và tên '${name}' đã tồn tại` });
     }
 
-    // Nếu có mode AT_HOME hoặc AT_CUSTOM_LOCATION thì cần địa chỉ nhận mẫu
-    if ((available_modes ?? []).includes('AT_HOME' as ServiceMode) && (!return_address || !return_phone)) {
-      throw new BadRequestException('Dịch vụ tại nhà yêu cầu địa chỉ và số điện thoại nhận mẫu');
+    // Kiểm tra return_address và return_phone
+    if (type === ServiceType.Testing || (available_modes ?? []).includes('AT_HOME' as ServiceMode)) {
+      if (!return_address) {
+        errors.push({ field: 'return_address', message: 'Địa chỉ nhận mẫu là bắt buộc' });
+      }
+      if (!return_phone) {
+        errors.push({ field: 'return_phone', message: 'Số điện thoại nhận mẫu là bắt buộc' });
+      }
     }
 
+    // Trả về lỗi nếu có
+    if (errors.length > 0) {
+      return {
+        statusCode: 400,
+        message: 'Dữ liệu không hợp lệ',
+        errors,
+      };
+    }
+
+    // Gán giá trị mặc định
     const defaultTestingHours =
       type === ServiceType.Testing
-        ? {
-          morning: { start: '07:00', end: '11:00' },
-          afternoon: { start: '13:00', end: '17:00' },
-        }
-        : undefined;
+        ? { morning: { start: '07:00', end: '11:00' }, afternoon: { start: '13:00', end: '17:00' } }
+        : { all_day: { start: '08:00', end: '17:00' } };
 
-    const defaultDailyCapacity = type === ServiceType.Testing ? 20 : undefined;
+    const finalDailyCapacity = daily_capacity ?? 10;
+    const finalReturnAddress = return_address ?? 'Không áp dụng';
+    const finalReturnPhone = return_phone ?? 'Không áp dụng';
 
+    // Tạo dịch vụ
     return this.prisma.service.create({
       data: {
         name,
@@ -57,9 +77,9 @@ export class ServiceService {
         type,
         available_modes: available_modes ?? ['AT_CLINIC'],
         testing_hours: defaultTestingHours,
-        daily_capacity: defaultDailyCapacity,
-        return_address: return_address ?? null,
-        return_phone: return_phone ?? null,
+        daily_capacity: finalDailyCapacity,
+        return_address: finalReturnAddress,
+        return_phone: finalReturnPhone,
         created_at: new Date(),
         updated_at: new Date(),
       },
@@ -69,15 +89,28 @@ export class ServiceService {
 
 
   async updateService(serviceId: string, dto: UpdateServiceDto) {
+    const errors: { field: string; message: string }[] = [];
+
+    // Kiểm tra dịch vụ tồn tại
     const service = await this.prisma.service.findUnique({
       where: { service_id: serviceId, deleted_at: null },
     });
-    if (!service) throw new BadRequestException('Dịch vụ không tồn tại');
 
-    if (dto.price !== undefined && dto.price < 0) {
-      throw new BadRequestException('Giá phải là số dương');
+    if (!service) {
+      errors.push({ field: 'serviceId', message: 'Dịch vụ không tồn tại' });
+      return {
+        statusCode: 400,
+        message: 'Dữ liệu không hợp lệ',
+        errors,
+      };
     }
 
+    // Kiểm tra giá
+    if (dto.price !== undefined && dto.price < 0) {
+      errors.push({ field: 'price', message: 'Giá phải là số dương' });
+    }
+
+    // Kiểm tra trùng tên và danh mục
     if (dto.name || dto.category) {
       const existing = await this.prisma.service.findFirst({
         where: {
@@ -87,9 +120,15 @@ export class ServiceService {
           NOT: { service_id: serviceId },
         },
       });
-      if (existing) throw new BadRequestException('Danh mục và tên dịch vụ đã tồn tại');
+      if (existing) {
+        errors.push({
+          field: 'name',
+          message: `Dịch vụ với danh mục '${dto.category ?? service.category}' và tên '${dto.name ?? service.name}' đã tồn tại`,
+        });
+      }
     }
 
+    // Kiểm tra category cho Consultation
     const updateType = dto.type ?? service.type;
     if (updateType === ServiceType.Consultation && dto.category) {
       const relatedTest = await this.prisma.service.findFirst({
@@ -100,21 +139,48 @@ export class ServiceService {
       }
     }
 
+    // Kiểm tra return_address và return_phone
     const updatedModes = dto.available_modes ?? (service.available_modes as string[] ?? []);
-    const mergedAddress = dto.return_address ?? service.return_address;
-    const mergedPhone = dto.return_phone ?? service.return_phone;
-
-    if (updatedModes.includes('AT_HOME' as ServiceMode) && (!mergedAddress || !mergedPhone)) {
-      throw new BadRequestException('Cập nhật thiếu thông tin nhận mẫu cho dịch vụ tại nhà');
+    const mergedAddress = dto.return_address ?? service.return_address ?? 'Không áp dụng';
+    const mergedPhone = dto.return_phone ?? service.return_phone ?? 'Không áp dụng';
+    if (updateType === ServiceType.Testing || updatedModes.includes('AT_HOME' as ServiceMode)) {
+      if (!mergedAddress || mergedAddress === 'Không áp dụng') {
+        errors.push({ field: 'return_address', message: 'Địa chỉ nhận mẫu là bắt buộc' });
+      }
+      if (!mergedPhone || mergedPhone === 'Không áp dụng') {
+        errors.push({ field: 'return_phone', message: 'Số điện thoại nhận mẫu là bắt buộc' });
+      }
     }
 
+    // Trả về lỗi nếu có
+    if (errors.length > 0) {
+      return {
+        statusCode: 400,
+        message: 'Dữ liệu không hợp lệ',
+        errors,
+      };
+    }
+
+    // Gán giá trị mặc định cho testing_hours và daily_capacity
+    const defaultTestingHours =
+      updateType === ServiceType.Testing
+        ? service.testing_hours ?? { morning: { start: '07:00', end: '11:00' }, afternoon: { start: '13:00', end: '17:00' } }
+        : { all_day: { start: '08:00', end: '17:00' } };
+    const defaultDailyCapacity = updateType === ServiceType.Testing ? service.daily_capacity ?? 20 : 10;
+
+    // Cập nhật dịch vụ
     return this.prisma.service.update({
       where: { service_id: serviceId },
       data: {
-        ...dto,
+        name: dto.name ?? service.name,
+        category: dto.category ?? service.category,
+        price: dto.price ?? service.price,
+        description: dto.description ?? service.description,
+        is_active: dto.is_active ?? service.is_active,
+        type: updateType,
         available_modes: updatedModes,
-        testing_hours: updateType === ServiceType.Testing ? service.testing_hours : this.prisma.$type.JsonNull,
-        daily_capacity: updateType === ServiceType.Testing ? service.daily_capacity : undefined,
+        testing_hours: defaultTestingHours,
+        daily_capacity: defaultDailyCapacity,
         return_address: mergedAddress,
         return_phone: mergedPhone,
         updated_at: new Date(),
@@ -147,14 +213,83 @@ export class ServiceService {
   }
 
   async getServiceById(serviceId: string, date?: string) {
-  const service = await this.prisma.service.findUnique({
-    where: { service_id: serviceId, deleted_at: null },
-  });
-  if (!service) {
-    throw new BadRequestException('Dịch vụ không tồn tại');
-  }
+    const service = await this.prisma.service.findUnique({
+      where: { service_id: serviceId, deleted_at: null },
+    });
+    if (!service) {
+      throw new BadRequestException('Dịch vụ không tồn tại');
+    }
 
-  if (service.type !== ServiceType.Consultation) {
+    if (service.type !== ServiceType.Consultation) {
+      return {
+        service: {
+          service_id: service.service_id,
+          name: service.name,
+          category: service.category,
+          price: service.price,
+          description: service.description,
+          is_active: service.is_active,
+          type: service.type,
+          available_modes: service.available_modes,
+          testing_hours: service.testing_hours,
+          daily_capacity: service.daily_capacity,
+          return_address: service.return_address,
+          return_phone: service.return_phone,
+          created_at: service.created_at,
+          updated_at: service.updated_at,
+        },
+      };
+    }
+
+    const where = date
+      ? {
+        start_time: {
+          gte: new Date(`${date}T00:00:00Z`),
+          lte: new Date(`${date}T23:59:59Z`),
+        },
+      }
+      : {};
+
+    const schedules = await this.prisma.schedule.findMany({
+      where: {
+        service_id: serviceId,
+        is_booked: false,
+        deleted_at: null,
+        ...where,
+      },
+      select: { consultant_id: true },
+      distinct: ['consultant_id'],
+    });
+
+    const consultantIds = schedules.map(s => s.consultant_id);
+
+    const consultants = await this.prisma.consultantProfile.findMany({
+      where: {
+        consultant_id: { in: consultantIds },
+        is_verified: true,
+        deleted_at: null,
+      },
+      select: {
+        consultant_id: true,
+        specialization: true,
+        average_rating: true,
+        user: { select: { full_name: true } },
+        schedules: {
+          where: {
+            service_id: serviceId,
+            is_booked: false,
+            deleted_at: null,
+            ...where,
+          },
+          select: {
+            schedule_id: true,
+            start_time: true,
+            end_time: true,
+          },
+        },
+      },
+    });
+
     return {
       service: {
         service_id: service.service_id,
@@ -172,87 +307,18 @@ export class ServiceService {
         created_at: service.created_at,
         updated_at: service.updated_at,
       },
+      consultants: consultants.map((c) => ({
+        consultant_id: c.consultant_id,
+        full_name: c.user?.full_name || 'Unknown',
+        specialization: c.specialization,
+        average_rating: c.average_rating,
+        schedules: c.schedules.map((s) => ({
+          schedule_id: s.schedule_id,
+          start_time: s.start_time,
+          end_time: s.end_time,
+        })),
+      })),
     };
   }
-
-  const where = date
-    ? {
-        start_time: {
-          gte: new Date(`${date}T00:00:00Z`),
-          lte: new Date(`${date}T23:59:59Z`),
-        },
-      }
-    : {};
-
-  const schedules = await this.prisma.schedule.findMany({
-    where: {
-      service_id: serviceId,
-      is_booked: false,
-      deleted_at: null,
-      ...where,
-    },
-    select: { consultant_id: true },
-    distinct: ['consultant_id'],
-  });
-
-  const consultantIds = schedules.map(s => s.consultant_id);
-
-  const consultants = await this.prisma.consultantProfile.findMany({
-    where: {
-      consultant_id: { in: consultantIds },
-      is_verified: true,
-      deleted_at: null,
-    },
-    select: {
-      consultant_id: true,
-      specialization: true,
-      average_rating: true,
-      user: { select: { full_name: true } },
-      schedules: {
-        where: {
-          service_id: serviceId,
-          is_booked: false,
-          deleted_at: null,
-          ...where,
-        },
-        select: {
-          schedule_id: true,
-          start_time: true,
-          end_time: true,
-        },
-      },
-    },
-  });
-
-  return {
-    service: {
-      service_id: service.service_id,
-      name: service.name,
-      category: service.category,
-      price: service.price,
-      description: service.description,
-      is_active: service.is_active,
-      type: service.type,
-      available_modes: service.available_modes,
-      testing_hours: service.testing_hours,
-      daily_capacity: service.daily_capacity,
-      return_address: service.return_address,
-      return_phone: service.return_phone,
-      created_at: service.created_at,
-      updated_at: service.updated_at,
-    },
-    consultants: consultants.map((c) => ({
-      consultant_id: c.consultant_id,
-      full_name: c.user?.full_name || 'Unknown',
-      specialization: c.specialization,
-      average_rating: c.average_rating,
-      schedules: c.schedules.map((s) => ({
-        schedule_id: s.schedule_id,
-        start_time: s.start_time,
-        end_time: s.end_time,
-      })),
-    })),
-  };
-}
 
 }

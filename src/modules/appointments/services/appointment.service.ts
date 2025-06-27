@@ -50,14 +50,7 @@ export class AppointmentService {
     return validTransitions[current].includes(next);
   }
 
-  /**
- * Tạo lịch hẹn tư vấn với Consultant.
- * Kiểm tra lịch trống, dịch vụ, Consultant, và quyền tư vấn miễn phí (nếu cung cấp test_code).
- * Nếu hợp lệ và miễn phí, đánh dấu is_free_consultation = true và không tạo thanh toán.
- * Nếu không miễn phí, tạo link thanh toán.
- * @param dto Dữ liệu đầu vào bao gồm test_code để kiểm tra tư vấn miễn phí
- * @returns Lịch hẹn đã tạo và link thanh toán (nếu có)
- */
+
   async createAppointment(dto: CreateAppointmentDto & { userId: string }) {
     const { consultant_id, schedule_id, service_id, type, location, userId, test_code } = dto;
 
@@ -158,7 +151,7 @@ export class AppointmentService {
     // Tạo thanh toán nếu không miễn phí
     if (!isFreeConsultation) {
       let orderCode: number | null = null;
-      for (let i = 0; i < 3; i++) {
+      for (let i = 0; i < 5; i++) {
         const cand = Number(`${Date.now() % 100000}${Math.floor(Math.random() * 1000)}`.padStart(8, '0'));
         if (!await this.prisma.payment.findUnique({ where: { order_code: cand } })) {
           orderCode = cand;
@@ -166,6 +159,19 @@ export class AppointmentService {
         }
       }
       if (!orderCode) throw new BadRequestException('Tạo mã thanh toán thất bại');
+
+      // Tạo bản ghi Payment trước
+      await this.prisma.payment.create({
+        data: {
+          appointment_id: appt.appointment_id,
+          user_id: userId,
+          amount: paymentAmount,
+          payment_method: PaymentMethod.BankCard,
+          status: PaymentTransactionStatus.Pending,
+          order_code: orderCode,
+          expires_at: new Date(Date.now() + 30 * 60 * 1000), // 30 phút
+        },
+      });
 
       const payDto: CreatePaymentDto = {
         orderCode,
@@ -177,6 +183,7 @@ export class AppointmentService {
         paymentMethod: PaymentMethod.BankCard,
         appointmentId: appt.appointment_id,
       };
+
       const { paymentLink } = await this.paymentService.createPaymentLink(userId, payDto);
 
       return { appointment: appt, paymentLink, message: 'Đặt lịch tư vấn thành công, vui lòng thanh toán' };
@@ -186,8 +193,23 @@ export class AppointmentService {
   }
 
 
+
   async createStiAppointment(dto: CreateStiAppointmentDto & { userId: string }) {
-    const { serviceId, date, session, location, category = 'STI', selected_mode, userId, contact_name, contact_phone, shipping_address, province, district, ward } = dto;
+    const {
+      serviceId,
+      date,
+      session,
+      location,
+      category = 'STI',
+      selected_mode,
+      userId,
+      contact_name,
+      contact_phone,
+      shipping_address,
+      province,
+      district,
+      ward,
+    } = dto;
 
     // Kiểm tra ngày
     const appointmentDate = new Date(date);
@@ -205,8 +227,8 @@ export class AppointmentService {
     const modes = (svc.available_modes as ServiceMode[]) ?? [];
     if (!modes.includes(selected_mode)) throw new BadRequestException('Dịch vụ không hỗ trợ hình thức đã chọn');
 
-    // Kiểm tra khung giờ
-    const testingHours = svc.testing_hours as { morning?: { start: string; end: string }; afternoon?: { start: string; end: string } };
+    // Kiểm tra buổi
+    const testingHours = svc.testing_hours as Record<string, { start: string; end: string }>;
     if (!testingHours[session]) throw new BadRequestException(`Buổi ${session} không hỗ trợ`);
 
     // Kiểm tra dung lượng
@@ -215,11 +237,15 @@ export class AppointmentService {
     const endOfDay = new Date(date);
     endOfDay.setHours(23, 59, 59, 999);
     const existingAppointments = await this.prisma.appointment.count({
-      where: { service_id: serviceId, start_time: { gte: startOfDay, lte: endOfDay }, status: { not: 'Cancelled' } },
+      where: {
+        service_id: serviceId,
+        start_time: { gte: startOfDay, lte: endOfDay },
+        status: { not: 'Cancelled' },
+      },
     });
     if (existingAppointments >= svc.daily_capacity) throw new BadRequestException('Dung lượng đã đầy');
 
-    // Tính thời gian lịch hẹn
+    // Tính giờ bắt đầu - kết thúc
     const sessionHours = testingHours[session];
     const startHour = parseInt(sessionHours.start.split(':')[0]);
     const startMinute = parseInt(sessionHours.start.split(':')[1]);
@@ -231,10 +257,25 @@ export class AppointmentService {
     const endTime = new Date(startTime);
     endTime.setMinutes(startTime.getMinutes() + slotDuration);
 
-    // Tạo mã đơn hàng
+    // Tạo appointment trước
+    const appt = await this.prisma.appointment.create({
+      data: {
+        user_id: userId,
+        type: 'Testing',
+        start_time: startTime,
+        end_time: endTime,
+        status: 'Pending',
+        payment_status: 'Pending',
+        location: selected_mode === ServiceMode.AT_CLINIC ? location : null,
+        service_id: serviceId,
+        mode: selected_mode,
+      },
+    });
+
+    // Tạo orderCode
     let orderCode: number | null = null;
     const triedCodes = new Set();
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 5; i++) {
       const cand = Number(`${Date.now() % 100000}${Math.floor(Math.random() * 1000)}`.padStart(8, '0'));
       if (!triedCodes.has(cand) && !(await this.prisma.payment.findUnique({ where: { order_code: cand } }))) {
         orderCode = cand;
@@ -244,20 +285,20 @@ export class AppointmentService {
     }
     if (!orderCode) throw new BadRequestException('Tạo mã thanh toán thất bại');
 
-    // Tạo mã xét nghiệm
-    let testCode: string | null = null;
-    const triedTestCodes = new Set();
-    for (let i = 0; i < 3; i++) {
-      const cand = this.generateTestCode(category);
-      if (!triedTestCodes.has(cand) && !(await this.prisma.testResult.findFirst({ where: { test_code: cand } }))) {
-        testCode = cand;
-        break;
-      }
-      triedTestCodes.add(cand);
-    }
-    if (!testCode) throw new BadRequestException('Tạo mã xét nghiệm thất bại');
+    // Tạo payment trước
+    const payment = await this.prisma.payment.create({
+      data: {
+        appointment_id: appt.appointment_id,
+        user_id: userId,
+        amount: Number(svc.price),
+        payment_method: PaymentMethod.BankCard,
+        status: PaymentTransactionStatus.Pending,
+        order_code: orderCode,
+        expires_at: new Date(Date.now() + 30 * 60 * 1000), // 30 phút
+      },
+    });
 
-    // Tạo payment link
+    // Gọi PayOS để tạo payment link
     const payDto: CreatePaymentDto = {
       orderCode,
       amount: Number(svc.price),
@@ -266,80 +307,66 @@ export class AppointmentService {
       returnUrl: 'https://your-frontend/.../success',
       buyerName: userId,
       paymentMethod: PaymentMethod.BankCard,
-      appointmentId: '',
+      appointmentId: appt.appointment_id,
     };
+
     let paymentLink: string;
     try {
       const result = await this.paymentService.createPaymentLink(userId, payDto);
       paymentLink = result.paymentLink;
     } catch (error) {
+      this.logger.error('Tạo liên kết thanh toán thất bại:', error);
       throw new BadRequestException('Tạo liên kết thanh toán thất bại');
     }
 
-    // Transaction
-    const [appt, testResult, payment] = await this.prisma.$transaction(
-      async (prisma) => {
-        // Tạo lịch hẹn
-        const appt = await prisma.appointment.create({
-          data: {
-            user_id: userId,
-            type: 'Testing',
-            start_time: startTime,
-            end_time: endTime,
-            status: 'Pending',
-            payment_status: 'Pending',
-            location: selected_mode === ServiceMode.AT_CLINIC ? location : null,
-            service_id: serviceId,
-            mode: selected_mode,
-          },
-        });
+    // Transaction: Tạo test result và shipping info
+    const [testResult] = await this.prisma.$transaction(async (tx) => {
+      const testResult = await tx.testResult.create({
+        data: {
+          appointment_id: appt.appointment_id,
+          service_id: serviceId,
+          result_data: 'Pending',
+          status: 'Pending',
+          test_code: await this.generateUniqueTestCode(category),
+        },
+      });
 
-        // Tạo kết quả xét nghiệm
-        const testResult = await prisma.testResult.create({
-          data: { appointment_id: appt.appointment_id, service_id: serviceId, result_data: 'Pending', status: 'Pending', test_code: testCode },
-        });
-
-        // Tạo ShippingInfo cho AT_HOME
-        if (selected_mode === ServiceMode.AT_HOME) {
-          await prisma.shippingInfo.create({
-            data: {
-              appointment_id: appt.appointment_id,
-              provider: 'GHN',
-              shipping_status: 'Pending',
-              contact_name: contact_name!,
-              contact_phone: contact_phone!,
-              shipping_address: shipping_address!,
-              province: province!,
-              district: district!,
-              ward: ward!,
-            },
-          });
-        }
-
-        // Tạo bản ghi Payment
-        const payment = await prisma.payment.create({
+      if (selected_mode === ServiceMode.AT_HOME) {
+        await tx.shippingInfo.create({
           data: {
             appointment_id: appt.appointment_id,
-            user_id: userId,
-            amount: Number(svc.price),
-            payment_method: PaymentMethod.BankCard,
-            status: PaymentTransactionStatus.Pending,
-            order_code: orderCode,
+            provider: 'GHN',
+            shipping_status: 'Pending',
+            contact_name: contact_name!,
+            contact_phone: contact_phone!,
+            shipping_address: shipping_address!,
+            province: province!,
+            district: district!,
+            ward: ward!,
           },
         });
+      }
 
-        return [appt, testResult, payment];
-      },
-      { timeout: 15000 } // Tăng timeout lên 15 giây
-    );
+      return [testResult];
+    });
 
-    // Các thao tác không cần transaction
+    // Tạo lịch sử & thông báo
     await this.prisma.appointmentStatusHistory.create({
-      data: { appointment_id: appt.appointment_id, status: 'Pending', notes: 'Tạo lịch hẹn xét nghiệm', changed_by: userId },
+      data: {
+        appointment_id: appt.appointment_id,
+        status: 'Pending',
+        notes: 'Tạo lịch hẹn xét nghiệm',
+        changed_by: userId,
+      },
     });
 
     await this.prisma.testResultStatusHistory.create({
-      data: { result_id: testResult.result_id, status: 'Pending', notes: 'Kết quả khởi tạo', changed_by: userId },
+      data: {
+        result_id: testResult.result_id,
+        status: 'Pending',
+        notes: 'Kết quả khởi tạo',
+        changed_by: userId,
+      },
     });
 
     await this.prisma.notification.create({
@@ -347,16 +374,36 @@ export class AppointmentService {
         user_id: userId,
         type: 'Email',
         title: 'Đặt lịch xét nghiệm thành công',
-        content: `Lịch hẹn xét nghiệm của bạn đã được tạo. Mã xét nghiệm: ${testCode}. Vui lòng thanh toán để xác nhận.`,
+        content: `Lịch hẹn xét nghiệm của bạn đã được tạo. Mã xét nghiệm: ${testResult.test_code}. Vui lòng thanh toán để xác nhận.`,
         status: 'Pending',
       },
     });
 
     this.logger.log(`Tạo lịch xét nghiệm ${appt.appointment_id} bởi user ${userId}`);
 
-    return { appointment: appt, paymentLink, testCode, message: 'Đặt lịch xét nghiệm thành công', return_address: svc.return_address, return_phone: svc.return_phone };
+    return {
+      appointment: appt,
+      paymentLink,
+      testCode: testResult.test_code,
+      message: 'Đặt lịch xét nghiệm thành công',
+      return_address: svc.return_address,
+      return_phone: svc.return_phone,
+    };
   }
 
+  // Hàm tạo testCode duy nhất
+  private async generateUniqueTestCode(category: string): Promise<string> {
+    const maxAttempts = 5;
+    const triedTestCodes = new Set();
+    for (let i = 0; i < maxAttempts; i++) {
+      const cand = this.generateTestCode(category);
+      if (!triedTestCodes.has(cand) && !(await this.prisma.testResult.findFirst({ where: { test_code: cand } }))) {
+        return cand;
+      }
+      triedTestCodes.add(cand);
+    }
+    throw new BadRequestException('Tạo mã xét nghiệm thất bại');
+  }
 
 
 
@@ -810,8 +857,8 @@ export class AppointmentService {
   }
 
 
-  
-  
+
+
   async validateTestCode(testCode: string, userId: string) {
     const testResult = await this.prisma.testResult.findUnique({
       where: { test_code: testCode },

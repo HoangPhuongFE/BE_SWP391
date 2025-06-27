@@ -23,8 +23,36 @@ export class PaymentService {
     this.payos = new PayOS(clientId, apiKey, ckKey);
   }
 
-  /** Tạo link + lưu Payment (Pending) */
- async createPaymentLink(userId: string, dto: CreatePaymentDto) {
+  /** Tạo link thanh toán */
+  async createPaymentLink(userId: string, dto: CreatePaymentDto) {
+    // Kiểm tra đầu vào cơ bản
+    if (!dto.appointmentId) {
+      this.logger.warn('Thiếu appointmentId trong DTO');
+      throw new BadRequestException('Thiếu thông tin lịch hẹn');
+    }
+
+    // Kiểm tra appointment_id có tồn tại không
+    const appointmentExists = await this.prisma.appointment.findUnique({
+      where: { appointment_id: dto.appointmentId },
+      select: { appointment_id: true },
+    });
+
+    if (!appointmentExists) {
+      this.logger.warn(`Không tìm thấy Appointment ID = ${dto.appointmentId}`);
+      throw new BadRequestException('Lịch hẹn không tồn tại');
+    }
+
+    // Kiểm tra xem Payment đã tồn tại với orderCode
+    const existingPayment = await this.prisma.payment.findUnique({
+      where: { order_code: dto.orderCode },
+    });
+
+    if (!existingPayment) {
+      this.logger.warn(`Không tìm thấy Payment với orderCode = ${dto.orderCode}`);
+      throw new BadRequestException('Thông tin thanh toán không tồn tại');
+    }
+
+    // Gọi PayOS để tạo link thanh toán
     let linkData;
     try {
       linkData = await this.payos.createPaymentLink({
@@ -42,25 +70,10 @@ export class PaymentService {
       throw new BadRequestException('Không thể tạo link thanh toán');
     }
 
-    try {
-      await this.prisma.payment.create({
-        data: {
-          payment_id: crypto.randomUUID(), // Tự sinh UUID nếu cần
-          user_id: userId,
-          appointment_id: dto.appointmentId,
-          order_code: dto.orderCode,
-          amount: dto.amount,
-          payment_method: dto.paymentMethod,
-          status: 'Pending',
-          expires_at: new Date(Date.now() + 30 * 60 * 1000), // 30 phút
-        },
-      });
-    } catch (err) {
-      this.logger.error('Lưu Payment vào DB lỗi:', err);
-      throw new BadRequestException('Lưu thanh toán thất bại');
-    }
-
-    return { paymentLink: linkData.checkoutUrl, message: 'OK' }; // Sửa thành checkoutUrl nếu đúng
+    return {
+      paymentLink: linkData.checkoutUrl,
+      message: 'OK',
+    };
   }
 
   /** Xử lý callback từ PayOS */

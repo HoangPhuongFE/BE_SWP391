@@ -176,8 +176,8 @@ export class AuthService {
     const manager = await this.prisma.user.findUnique({
       where: { user_id: managerId },
     });
-    if (!manager || manager.role !== 'Manager') {
-      throw new ForbiddenException('Chỉ có Manager mới có quyền thay đổi vai trò');
+    if (!manager || manager.role !== 'Manager' && manager.role !== 'Admin') {
+      throw new ForbiddenException('Chỉ có Manager và Admin mới có quyền thay đổi vai trò');
     }
 
     const validRoles: Role[] = [Role.Customer, Role.Consultant, Role.Manager, Role.Staff, Role.Guest, Role.Admin];

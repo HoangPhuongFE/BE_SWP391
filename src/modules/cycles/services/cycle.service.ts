@@ -17,35 +17,42 @@ export class CycleService {
     const start = new Date(startDate);
     const now = new Date();
 
-    // Kiểm tra ngày hợp lệ
-    if (start > now) {
-      throw new BadRequestException('Ngày bắt đầu không được trong tương lai');
-    }
+    // Validate ngày kỳ hiện tại
+    if (start > now) throw new BadRequestException('Ngày bắt đầu không được trong tương lai');
 
     // Kiểm tra periodLength
     if (periodLength < 2 || periodLength > 7) {
       this.logger.warn(`Độ dài kỳ kinh ${periodLength} ngoài khoảng 2-7 ngày`);
     }
 
-    // Tính độ dài chu kỳ trung bình
-    let averageCycleLength = 28;
-    if (previousCycles && previousCycles.length >= 2) {
-      const cycleLengths = previousCycles
-        .map((cycle, index, arr) => {
-          if (index === 0) return null;
-          const current = new Date(cycle.startDate);
-          const previous = new Date(arr[index - 1].startDate);
-          return (current.getTime() - previous.getTime()) / (1000 * 60 * 60 * 24);
-        })
-        .filter((length) => length !== null);
-      averageCycleLength = cycleLengths.reduce((sum, len) => sum + len, 0) / cycleLengths.length;
+    // Cần previousCycles có ít nhất 1 kỳ trước đó
+    if (!previousCycles || previousCycles.length < 1) {
+      throw new BadRequestException('Bạn cần nhập ít nhất 1 kỳ trước đó');
     }
 
-    // Dự đoán chu kỳ và rụng trứng
+    // Chỉ lấy kỳ trước đó
+    const prev = previousCycles[0];
+    const prevDate = new Date(prev.startDate);
+
+    // Validate logic ngày
+    if (prevDate >= start) throw new BadRequestException('Kỳ trước đó phải nhỏ hơn kỳ hiện tại');
+
+    // Kiểm tra cách tối thiểu 20 ngày
+    const daysBetween = (start.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24);
+    if (daysBetween < 20) throw new BadRequestException('2 kỳ liên tiếp phải cách nhau ít nhất 20 ngày');
+
+    // Tính averageCycleLength
+    const averageCycleLength = daysBetween;
+    // Tính averagePeriodLength nếu user có nhập periodLength cho kỳ trước đó
+    const averagePeriodLength = prev.periodLength
+      ? (periodLength + prev.periodLength) / 2
+      : periodLength;
+
+    // Dự đoán kỳ tiếp theo
     const nextCycleStart = new Date(start.getTime() + averageCycleLength * 24 * 60 * 60 * 1000);
     const ovulationDate = new Date(start.getTime() + 14 * 24 * 60 * 60 * 1000);
 
-    // Lưu chu kỳ
+    // Lưu kỳ hiện tại
     const cycle = await this.prisma.menstrualCycle.create({
       data: {
         user_id: userId,
@@ -56,16 +63,17 @@ export class CycleService {
       },
     });
 
-    // Tạo thông báo nhắc nhở
+    // Tạo notification
     await this.createNotifications(userId, nextCycleStart, ovulationDate);
 
     return {
       cycle,
       predictions: { nextCycleStart, ovulationDate },
+      averageCycleLength,
+      averagePeriodLength,
       message: 'Thiết lập chu kỳ thành công',
     };
   }
-
   async createCycle(userId: string, dto: CreateCycleDto) {
     const { startDate, periodLength, symptoms, notes } = dto;
     const start = new Date(startDate);
@@ -76,22 +84,22 @@ export class CycleService {
       throw new BadRequestException('Ngày bắt đầu không được trong tương lai');
     }
 
-    // Kiểm tra 1 chu kỳ/tháng
+    // Kiểm tra periodLength
+    if (periodLength < 2 || periodLength > 7) {
+      this.logger.warn(`Độ dài kỳ kinh ${periodLength} ngoài khoảng 2-7 ngày`);
+    }
+
+    // Kiểm tra cách kỳ trước tối thiểu 20 ngày
     const lastCycle = await this.prisma.menstrualCycle.findFirst({
+
       where: { user_id: userId, deleted_at: null },
       orderBy: { start_date: 'desc' },
     });
     if (lastCycle) {
-      const lastMonth = lastCycle.start_date.getMonth();
-      const currentMonth = start.getMonth();
-      if (lastMonth === currentMonth && start.getFullYear() === lastCycle.start_date.getFullYear()) {
-        throw new BadRequestException('Chỉ được ghi nhận 1 chu kỳ/tháng');
+      const daysBetween = (start.getTime() - lastCycle.start_date.getTime()) / (1000 * 60 * 60 * 24);
+      if (daysBetween < 20) {
+        throw new BadRequestException('Chu kỳ mới phải cách chu kỳ trước đó ít nhất 20 ngày');
       }
-    }
-
-    // Kiểm tra periodLength
-    if (periodLength < 2 || periodLength > 7) {
-      this.logger.warn(`Độ dài kỳ kinh ${periodLength} ngoài khoảng 2-7 ngày`);
     }
 
     // Tính độ dài chu kỳ
@@ -138,7 +146,6 @@ export class CycleService {
       message: 'Cập nhật chu kỳ thành công',
     };
   }
-
   async updateSymptoms(userId: string, cycleId: string, dto: UpdateSymptomsDto) {
     const cycle = await this.prisma.menstrualCycle.findUnique({
       where: { cycle_id: cycleId, user_id: userId, deleted_at: null },

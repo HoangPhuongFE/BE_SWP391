@@ -10,6 +10,76 @@ export class ShippingService {
     private readonly ghnService: GhnService,
   ) { }
 
+  //  async createOrderForAppointment(appointmentId: string) {
+  //   const appointment = await this.prisma.appointment.findUnique({
+  //     where: { appointment_id: appointmentId },
+  //     include: { shipping_info: true },
+  //   });
+
+  //   if (!appointment?.shipping_info) return null;
+
+  //   const info = appointment.shipping_info;
+
+  //   const from = {
+  //     name: 'Phòng Lab ABC',
+  //     phone: '0938982776',
+  //     address: '123 Pasteur, Q1, TP.HCM',
+  //     district_id: process.env.GHN_FROM_DISTRICT
+  //       ? +process.env.GHN_FROM_DISTRICT
+  //       : (() => {
+  //           throw new Error('GHN_FROM_DISTRICT env variable is not set');
+  //         })(),
+  //     ward_code:
+  //       process.env.GHN_FROM_WARD ??
+  //       (() => {
+  //         throw new Error('GHN_FROM_WARD env variable is not set');
+  //       })(),
+  //   };
+
+  //   let ghnData: any;
+  //   try {
+  //     ghnData = await this.ghnService.createOrder({
+  //       from_name: from.name,
+  //       from_phone: from.phone,
+  //       from_address: from.address,
+  //       from_district_id: from.district_id,
+  //       from_ward_code: from.ward_code,
+
+  //       to_name: info.contact_name,
+  //       to_phone: info.contact_phone,
+  //       to_address: info.shipping_address,
+  //       to_district_id: parseInt(info.district),
+  //       to_ward_code: info.ward,
+  //       client_order_code: appointmentId,
+  //     });
+  //   } catch (error: any) {
+  //     // ❗ THAY ĐOẠN FALLBACK MOCK BẰNG LỆNH THROW
+  //     console.error('GHN lỗi:', error?.response?.data || error.message);
+  //     throw new Error(
+  //       `Không thể tạo đơn hàng GHN: ${error?.response?.data?.code_message_value || error.message}`
+  //     );
+  //   }
+
+  //   await this.prisma.shippingInfo.update({
+  //     where: { id: info.id },
+  //     data: {
+  //       provider: 'GHN',
+  //       provider_order_code: ghnData.order_code,
+  //       shipping_status: ShippingStatus.Shipped,
+  //       expected_delivery_time: ghnData.expected_delivery_time
+  //         ? new Date(ghnData.expected_delivery_time)
+  //         : undefined,
+  //       label_url: ghnData.label || null,
+  //     },
+  //   });
+
+  //   return {
+  //     message: 'Tạo đơn GHN chiều đi thành công',
+  //     order_code: ghnData.order_code,
+  //     expected_delivery_time: ghnData.expected_delivery_time,
+  //   };
+  // }
+
   async createOrderForAppointment(appointmentId: string) {
     const appointment = await this.prisma.appointment.findUnique({
       where: { appointment_id: appointmentId },
@@ -70,8 +140,6 @@ export class ShippingService {
       expected_delivery_time: ghnData.expected_delivery_time,
     }
   }
-
-
   async getByAppointmentId(appointmentId: string) {
     const outbound = await this.prisma.shippingInfo.findUnique({
       where: { appointment_id: appointmentId },
@@ -307,24 +375,24 @@ export class ShippingService {
 
 
   async getReturnShippingById(id: string) {
-  return this.prisma.returnShippingInfo.findUnique({
-    where: { id },
-    select: {
-      id: true,
-      appointment_id: true,
-      provider: true,
-      provider_order_code: true,
-      shipping_status: true,
-      contact_name: true,
-      contact_phone: true,
-      pickup_address: true,
-      pickup_province: true,
-      pickup_district: true,
-      pickup_ward: true,
-      created_at: true,
-      updated_at: true,
-    },
-  });
-}
+    return this.prisma.returnShippingInfo.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        appointment_id: true,
+        provider: true,
+        provider_order_code: true,
+        shipping_status: true,
+        contact_name: true,
+        contact_phone: true,
+        pickup_address: true,
+        pickup_province: true,
+        pickup_district: true,
+        pickup_ward: true,
+        created_at: true,
+        updated_at: true,
+      },
+    });
+  }
 
 }

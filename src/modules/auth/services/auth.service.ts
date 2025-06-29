@@ -257,11 +257,14 @@ export class AuthService {
             email: true,
             full_name: true,
             role: true,
+            phone_number: true,
+            address: true,
             is_verified: true,
             is_active: true,
           },
         },
       },
+
     });
   }
 
@@ -273,6 +276,9 @@ export class AuthService {
             user_id: true,
             email: true,
             full_name: true,
+            phone_number: true,
+            address: true,
+            
             role: true,
             is_verified: true,
             is_active: true,
@@ -381,6 +387,9 @@ export class AuthService {
       user_id: user.user_id,
       email: user.email,
       full_name: user.full_name,
+      phone_number: user.phone_number,
+      address: user.address,
+      
       role: user.role,
       is_verified: user.is_verified,
       is_active: user.is_active,

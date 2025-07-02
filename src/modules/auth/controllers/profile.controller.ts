@@ -16,6 +16,7 @@ import { AuthService } from '../services/auth.service';
 import { Roles } from '../decorators/roles.decorator';
 import { Role } from '@prisma/client';
 import { RolesGuard } from '../guards/roles.guard';
+import { Public } from '../decorators/public.decorator';
 
 @ApiTags('Profile')
 @Controller('auth/profile')
@@ -91,10 +92,8 @@ export class ProfileController {
   }
 
   @Get('consultants/all')
-  @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Roles(Role.Manager, Role.Staff, Role.Customer, Role.Consultant , Role.Admin)
+  @Public()
   @ApiOperation({ summary: 'Lấy tất cả ConsultantProfile' })
-  @ApiBearerAuth('access-token')
   @ApiResponse({ status: 200, description: 'Danh sách tất cả ConsultantProfile' })
   async getAllConsultantProfiles() {
     return this.authService.getAllConsultantProfiles();

@@ -2,7 +2,7 @@ import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { CreateCommentDto } from '../dtos/create-comment.dto';
 import { UpdateCommentDto } from '../dtos/update-comment.dto';
-import  Filter from 'bad-words';
+import Filter from 'bad-words';
 import { Role } from '@prisma/client';
 
 const filter = new Filter();
@@ -12,7 +12,7 @@ const filter = new Filter();
 export class BlogCommentService {
   private readonly logger = new Logger(BlogCommentService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   async createComment(postId: string, dto: CreateCommentDto, userId: string) {
     const blog = await this.prisma.blogPost.findUnique({ where: { post_id: postId, deleted_at: null } });
@@ -40,11 +40,14 @@ export class BlogCommentService {
     const comment = await this.prisma.blogComment.create({
       data: {
         post: { connect: { post_id: postId } },
-        user: { connect: { user_id: userId } },
+        user: { connect: { user_id: userId } }, // Chỉ kết nối user_id
         ...parentConnect,
         content,
         status,
         created_at: new Date(),
+      },
+      include: {
+        user: { select: { full_name: true } }, // Lấy full_name của user
       },
     });
 
@@ -56,7 +59,14 @@ export class BlogCommentService {
     const comments = await this.prisma.blogComment.findMany({
       where: { post_id: postId, parent_id: null, status: 'Approved', deleted_at: null },
       orderBy: { created_at: 'desc' },
-      include: { replies: { where: { status: 'Approved', deleted_at: null }, orderBy: { created_at: 'asc' } } },
+      include: {
+        user: { select: { full_name: true } }, // Lấy full_name của user
+        replies: {
+          where: { status: 'Approved', deleted_at: null },
+          orderBy: { created_at: 'asc' },
+          include: { user: { select: { full_name: true } } }, // Lấy full_name cho replies
+        },
+      },
     });
     return { comments, message: 'Lấy danh sách bình luận và phản hồi thành công' };
   }
@@ -70,6 +80,7 @@ export class BlogCommentService {
     const replies = await this.prisma.blogComment.findMany({
       where: { parent_id: id, status: 'Approved', deleted_at: null },
       orderBy: { created_at: 'asc' },
+      include: { user: { select: { full_name: true } } }, // Lấy full_name của user
     });
     return { replies, message: 'Lấy danh sách phản hồi thành công' };
   }

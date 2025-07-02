@@ -414,7 +414,12 @@ export class AppointmentService {
 
     const appointment = await this.prisma.appointment.findUnique({
       where: { appointment_id: appointmentId, deleted_at: null },
-      include: { test_result: true, user: true, service: true, shipping_info: true },
+      include: {
+        test_result: true,
+        user: true,
+        service: true,
+        return_shipping_info: true, // Sử dụng ReturnShippingInfo
+      },
     });
     if (!appointment) throw new BadRequestException('Lịch hẹn không tồn tại');
     if (appointment.type !== 'Testing') throw new BadRequestException('Chỉ áp dụng cho lịch hẹn xét nghiệm');
@@ -427,9 +432,9 @@ export class AppointmentService {
     if (
       status === AppointmentStatus.SampleCollected &&
       appointment.mode === ServiceMode.AT_HOME &&
-      appointment.shipping_info?.shipping_status !== 'ReturnedToLab'
+      (!appointment.return_shipping_info || appointment.return_shipping_info.shipping_status !== 'ReturnedToLab')
     ) {
-      throw new BadRequestException('Mẫu chưa được nhận tại phòng lab (trạng thái không phải ReturnedToLab)');
+      throw new BadRequestException('Mẫu chưa được nhận tại phòng lab (không có thông tin trả mẫu hoặc trạng thái không phải ReturnedToLab)');
     }
 
     let testResultUpdate: any = {};
@@ -458,8 +463,6 @@ export class AppointmentService {
         notes,
         updated_at: resultDate ? new Date(resultDate) : new Date(),
       };
-
-      // Set hạn sử dụng tư vấn miễn phí 30 ngày sau khi hoàn tất xét nghiệm
       appointmentUpdate.free_consultation_valid_until = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
     }
 

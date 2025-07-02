@@ -82,7 +82,7 @@ export class ProfileController {
 
    @Get('customers/all')
   @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Roles(Role.Manager, Role.Staff)
+  @Roles(Role.Manager, Role.Staff, Role.Customer, Role.Consultant , Role.Admin)
   @ApiOperation({ summary: 'Lấy tất cả CustomerProfile' })
   @ApiBearerAuth('access-token')
   @ApiResponse({ status: 200, description: 'Danh sách tất cả CustomerProfile' })
@@ -92,7 +92,7 @@ export class ProfileController {
 
   @Get('consultants/all')
   @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Roles(Role.Manager, Role.Staff)
+  @Roles(Role.Manager, Role.Staff, Role.Customer, Role.Consultant , Role.Admin)
   @ApiOperation({ summary: 'Lấy tất cả ConsultantProfile' })
   @ApiBearerAuth('access-token')
   @ApiResponse({ status: 200, description: 'Danh sách tất cả ConsultantProfile' })

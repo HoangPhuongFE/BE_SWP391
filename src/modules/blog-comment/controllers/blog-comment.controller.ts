@@ -6,6 +6,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody, ApiParam } from '@nestjs/swagger';
 import { Roles } from '../../auth/decorators/roles.decorator';
 import { Role } from '@prisma/client';
+import { Public } from '../../auth/decorators/public.decorator';
 
 @ApiTags('blog-comments')
 @Controller('blog-comments')
@@ -25,20 +26,16 @@ export class BlogCommentController {
   }
 
   @Get(':postId')
-  @Roles(Role.Customer, Role.Staff, Role.Manager)
-  @UseGuards(AuthGuard('jwt'))
+  @Public()
   @ApiOperation({ summary: 'Lấy tất cả bình luận và phản hồi của bài viết' })
-  @ApiBearerAuth('access-token')
   @ApiParam({ name: 'postId', description: 'ID bài viết' })
   async getCommentsByPostId(@Param('postId') postId: string) {
     return this.blogCommentService.getCommentsByPostId(postId);
   }
 
   @Get(':id/replies')
-  @Roles(Role.Customer, Role.Staff, Role.Manager)
-  @UseGuards(AuthGuard('jwt'))
+  @Public()
   @ApiOperation({ summary: 'Lấy tất cả phản hồi của một bình luận' })
-  @ApiBearerAuth('access-token')
   @ApiParam({ name: 'id', description: 'ID bình luận' })
   async getRepliesByCommentId(@Param('id') id: string) {
     return this.blogCommentService.getRepliesByCommentId(id);

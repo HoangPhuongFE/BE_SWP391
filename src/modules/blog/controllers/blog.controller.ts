@@ -50,16 +50,21 @@ export class BlogController {
   async getPendingBlogs() {
     return this.blogService.getPendingBlogs();
   }
+   @Get('related')
+  @Public()
+  @ApiOperation({ summary: 'Lấy danh sách bài viết liên quan theo danh mục' })
+  @ApiQuery({ name: 'category', description: 'Danh mục bài viết', required: true })
+  async getRelatedBlogs(@Query('category') category: string) {
+    return this.blogService.getRelatedBlogs(category);
+  }
 
   @Get(':id')
-  @Roles(Role.Staff, Role.Manager, Role.Customer, Role.Consultant)
-  @UseGuards(AuthGuard('jwt'))
-  @ApiOperation({ summary: 'Xem chi tiết bài viết theo ID (đăng nhập)' })
-  @ApiBearerAuth('access-token')
+  @Public()
+  @ApiOperation({ summary: 'Xem chi tiết bài viết theo ID' })
   @ApiParam({ name: 'id', description: 'ID bài viết' })
   async getBlogById(@Param('id') id: string, @Req() req) {
-    const userId = (req.user as any).userId;
-    const role = (req.user as any).role;
+    const userId = req.user ? (req.user as any).userId : null;
+    const role = req.user ? (req.user as any).role : null;
     return this.blogService.getBlogById(id, userId, role);
   }
 
@@ -71,8 +76,10 @@ export class BlogController {
     return this.blogService.getPublicBlogById(id);
   }
 
+ 
+
   @Put(':id')
-  @Roles(Role.Staff, Role.Consultant)
+  @Roles(Role.Staff, Role.Consultant, Role.Manager)
   @UseGuards(AuthGuard('jwt'))
   @ApiOperation({ summary: 'Cập nhật bài viết' })
   @ApiBearerAuth('access-token')

@@ -313,7 +313,7 @@ export class CycleService {
       await this.prisma.notification.create({
         data: {
           user_id: userId,
-          type: 'Email', // Mặc định, có thể lấy từ privacy_settings
+          type: 'Email', 
           title: notif.title,
           content: notif.content,
           status: 'Pending',

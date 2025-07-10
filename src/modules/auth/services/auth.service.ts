@@ -201,29 +201,31 @@ export class AuthService {
     });
   }
   async getCustomerProfile(userId: string) {
-    const profile = await this.prisma.customerProfile.findUnique({
-      where: { user_id: userId },
-      include: {
-        user: {
-          select: {
-            user_id: true,
-            email: true,
-            full_name: true,
-            phone_number: true,
-            address: true,
-            image: true,
-            role: true,
-            is_verified: true,
-            is_active: true,
-          },
-        },
-      },
-    });
+  // Lấy thông tin User trước để kiểm tra role
+  const user = await this.prisma.user.findUnique({
+    where: { user_id: userId },
+    select: {
+      user_id: true,
+      email: true,
+      full_name: true,
+      phone_number: true,
+      address: true,
+      image: true,
+      role: true,
+      is_verified: true,
+      is_active: true,
+    },
+  });
 
-    if (!profile) {
-      // Nếu không có CustomerProfile, vẫn lấy thông tin từ User
-      const user = await this.prisma.user.findUnique({
-        where: { user_id: userId },
+  if (!user) {
+    throw new NotFoundException('Không tìm thấy người dùng');
+  }
+
+  // Lấy CustomerProfile
+  const customerProfile = await this.prisma.customerProfile.findUnique({
+    where: { user_id: userId },
+    include: {
+      user: {
         select: {
           user_id: true,
           email: true,
@@ -235,13 +237,44 @@ export class AuthService {
           is_verified: true,
           is_active: true,
         },
-      });
-      if (!user) throw new NotFoundException('Không tìm thấy người dùng');
-      return { user }; // Trả về chỉ thông tin User nếu không có CustomerProfile
-    }
+      },
+    },
+  });
 
-    return profile;
+  // Lấy ConsultantProfile nếu user là Consultant
+  let consultantProfile: {
+    consultant_id: string;
+    qualifications: string | null;
+    experience: string | null;
+    specialization: string | null;
+    is_verified: boolean;
+    average_rating: number | null;
+    created_at: Date;
+    updated_at: Date;
+  } | null = null;
+  if (user.role === 'Consultant') {
+    consultantProfile = await this.prisma.consultantProfile.findUnique({
+      where: { user_id: userId },
+      select: {
+        consultant_id: true,
+        qualifications: true,
+        experience: true,
+        specialization: true,
+        is_verified: true,
+        average_rating: true,
+        created_at: true,
+        updated_at: true,
+      },
+    });
   }
+
+  // Trả về dữ liệu kết hợp
+  return {
+    user,
+    customerProfile: customerProfile || null,
+    consultantProfile: consultantProfile || null,
+  };
+}
 
   async upsertCustomerProfile(userId: string, dto: UpdateCustomerProfileDto, file?: Express.Multer.File) {
     let imageUrl: string | undefined;

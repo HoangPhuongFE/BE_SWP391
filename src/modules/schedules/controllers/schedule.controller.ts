@@ -147,8 +147,8 @@ export class ScheduleController {
   @Roles(Role.Consultant)
   @UseGuards(AuthGuard('jwt'))
   @ApiOperation({
-    summary: 'Consultant xóa mềm lịch trống',
-    description: 'Consultant xóa lịch của mình nếu chưa được đặt. Trả về lịch đã xóa mềm. FE hiển thị xác nhận xóa.',
+    summary: 'Tư vấn viên xóa mềm lịch trống',
+    description: 'Tư vấn viên xóa lịch của mình nếu chưa được đặt. Trả về lịch đã xóa mềm. FE hiển thị xác nhận xóa.',
   })
   @ApiBearerAuth('access-token')
   @ApiParam({ name: 'scheduleId', description: 'ID lịch trống' })
@@ -159,7 +159,7 @@ export class ScheduleController {
     const consultant = await this.scheduleService.getConsultantProfile(userId);
     if (!consultant || schedule.consultant_id !== consultant.consultant_id)
       throw new BadRequestException('Không có quyền xóa lịch này');
-    return this.scheduleService.deleteSchedule(scheduleId);
+    return this.scheduleService.deleteSchedule(scheduleId, userId, req.user.role);
   }
 
   /**
@@ -173,7 +173,7 @@ export class ScheduleController {
   @Roles(Role.Consultant)
   @UseGuards(AuthGuard('jwt'))
   @ApiOperation({
-    summary: 'Consultant tạo nhiều lịch trống',
+    summary: 'Tư vấn viên tạo nhiều lịch trống',
     description: 'Tạo hàng loạt lịch trống trong khoảng thời gian với độ dài mỗi lịch. Trả về số lịch tạo và danh sách lịch.',
   })
   @ApiBearerAuth('access-token')

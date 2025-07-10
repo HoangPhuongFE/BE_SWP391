@@ -206,6 +206,15 @@ export class AuthService {
   }
 
   async upsertCustomerProfile(userId: string, dto: UpdateCustomerProfileDto) {
+    // Cập nhật image vào bảng User nếu có
+    if (dto.image !== undefined) {
+      await this.prisma.user.update({
+        where: { user_id: userId },
+        data: { image: dto.image },
+      });
+    }
+
+    // Cập nhật hoặc tạo CustomerProfile
     return this.prisma.customerProfile.upsert({
       where: { user_id: userId },
       create: {
@@ -257,6 +266,7 @@ export class AuthService {
             email: true,
             full_name: true,
             role: true,
+            image: true,
             phone_number: true,
             address: true,
             is_verified: true,
@@ -269,21 +279,10 @@ export class AuthService {
   }
 
   async getAllConsultantProfiles() {
-    return this.prisma.consultantProfile.findMany({
+    return this.prisma.user.findMany({
+      where: { role: 'Consultant' }, // Adjust role value as needed
       include: {
-        user: {
-          select: {
-            user_id: true,
-            email: true,
-            full_name: true,
-            phone_number: true,
-            address: true,
-            
-            role: true,
-            is_verified: true,
-            is_active: true,
-          },
-        },
+        consultant: true, // Will be null if not exists
       },
     });
   }
@@ -389,7 +388,7 @@ export class AuthService {
       full_name: user.full_name,
       phone_number: user.phone_number,
       address: user.address,
-      
+
       role: user.role,
       is_verified: user.is_verified,
       is_active: user.is_active,

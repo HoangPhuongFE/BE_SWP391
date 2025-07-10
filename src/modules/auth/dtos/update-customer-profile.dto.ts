@@ -38,4 +38,12 @@ export class UpdateCustomerProfileDto {
   })
   @IsOptional()
   privacySettings?: Record<string, any>;
+
+  @ApiPropertyOptional({
+    example: 'https://example.com/image.jpg',
+    description: 'URL hoặc đường dẫn ảnh đại diện của người dùng',
+  })
+  @IsOptional()
+  @IsString()
+  image?: string;
 }

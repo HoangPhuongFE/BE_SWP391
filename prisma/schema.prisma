@@ -128,6 +128,7 @@ model User {
   password_hash              String                     @db.VarChar(255)
   role                       Role                       @default(Customer)
   full_name                  String?                    @db.VarChar(100)
+  image                      String?                    @db.VarChar(255)
   phone_number               String?                    @db.VarChar(20)
   address                    String?
   is_verified                Boolean                    @default(false)

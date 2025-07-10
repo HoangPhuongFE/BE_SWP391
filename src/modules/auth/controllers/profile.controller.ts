@@ -40,8 +40,8 @@ export class ProfileController {
 
   @Patch('customer')
   @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Roles(Role.Customer)
-  @ApiOperation({ summary: 'Tạo hoặc cập nhật CustomerProfile' })
+  @Roles(Role.Customer , Role.Consultant, Role.Manager, Role.Staff, Role.Admin)
+  @ApiOperation({ summary: 'Cập nhật CustomerProfile' })
   @ApiBearerAuth('access-token')
   @ApiBody({ type: UpdateCustomerProfileDto })
   @ApiResponse({ status: 200, description: 'CustomerProfile sau khi cập nhật' })
@@ -69,7 +69,7 @@ export class ProfileController {
 
   @Patch('consultant')
   @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Roles(Role.Consultant)
+  @Roles(Role.Consultant , Role.Manager, Role.Staff, Role.Admin)
   @ApiOperation({ summary: 'Tạo hoặc cập nhật ConsultantProfile' })
   @ApiBearerAuth('access-token')
   @ApiBody({ type: UpdateConsultantProfileDto })

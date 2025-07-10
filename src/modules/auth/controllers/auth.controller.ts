@@ -127,7 +127,7 @@ export class AuthController {
   @ApiBearerAuth('access-token')
   @ApiBody({ type: ChangePasswordDto })
   @ApiResponse({ status: 200, description: 'Mật khẩu đã được thay đổi thành công' })
-  @UseGuards(AuthGuard('jwt'))               // Đảm bảo user đã login và có JWT
+  @UseGuards(AuthGuard('jwt'))              
   async changePassword(
     @Req() req,
     @Body() dto: ChangePasswordDto,

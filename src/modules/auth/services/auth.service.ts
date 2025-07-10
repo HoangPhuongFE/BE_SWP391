@@ -1,21 +1,24 @@
-import { Injectable, UnauthorizedException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import { Injectable, BadRequestException, ForbiddenException, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '@/prisma/prisma.service';
 import { UpdateCustomerProfileDto } from '../dtos/update-customer-profile.dto';
 import { UpdateConsultantProfileDto } from '../dtos/update-consultant-profile.dto';
 import { EmailService } from '@/modules/email/email.service';
+import { CloudinaryService } from 'nestjs-cloudinary'; // Import CloudinaryService
 import { randomInt } from 'crypto';
 import * as bcrypt from 'bcrypt';
 import { Role } from '@prisma/client';
+import { Readable } from 'stream';
 
 @Injectable()
 export class AuthService {
-  [x: string]: any;
   constructor(
     private readonly jwtService: JwtService,
     private readonly prisma: PrismaService,
     private readonly emailService: EmailService,
+    private readonly cloudinaryService: CloudinaryService,
   ) { }
+
 
   async handleOAuthLogin(userData: {
     provider: string;
@@ -197,24 +200,77 @@ export class AuthService {
       data: { role: newRole as Role },
     });
   }
-
   async getCustomerProfile(userId: string) {
     const profile = await this.prisma.customerProfile.findUnique({
       where: { user_id: userId },
+      include: {
+        user: {
+          select: {
+            user_id: true,
+            email: true,
+            full_name: true,
+            phone_number: true,
+            address: true,
+            image: true,
+            role: true,
+            is_verified: true,
+            is_active: true,
+          },
+        },
+      },
     });
+
+    if (!profile) {
+      // Nếu không có CustomerProfile, vẫn lấy thông tin từ User
+      const user = await this.prisma.user.findUnique({
+        where: { user_id: userId },
+        select: {
+          user_id: true,
+          email: true,
+          full_name: true,
+          phone_number: true,
+          address: true,
+          image: true,
+          role: true,
+          is_verified: true,
+          is_active: true,
+        },
+      });
+      if (!user) throw new NotFoundException('Không tìm thấy người dùng');
+      return { user }; // Trả về chỉ thông tin User nếu không có CustomerProfile
+    }
+
     return profile;
   }
 
-  async upsertCustomerProfile(userId: string, dto: UpdateCustomerProfileDto) {
-    // Cập nhật image vào bảng User nếu có
-    if (dto.image !== undefined) {
-      await this.prisma.user.update({
-        where: { user_id: userId },
-        data: { image: dto.image },
-      });
+  async upsertCustomerProfile(userId: string, dto: UpdateCustomerProfileDto, file?: Express.Multer.File) {
+    let imageUrl: string | undefined;
+
+    // Xử lý upload hình ảnh
+    if (file) {
+      try {
+        const uploadResult = await this.cloudinaryService.uploadFile(file, {
+          folder: 'profiles',
+        });
+        imageUrl = uploadResult.secure_url;
+      } catch (error) {
+        throw new BadRequestException('Lỗi khi upload hình ảnh: ' + error.message);
+      }
     }
 
-    // Cập nhật hoặc tạo CustomerProfile
+    // Cập nhật bảng User
+    await this.prisma.user.update({
+      where: { user_id: userId },
+      data: {
+        ...(imageUrl && { image: imageUrl }),
+        ...(dto.fullName !== undefined && { full_name: dto.fullName }),
+        ...(dto.phoneNumber !== undefined && { phone_number: dto.phoneNumber }),
+        ...(dto.address !== undefined && { address: dto.address }),
+      },
+    });
+
+    // Cập nhật hoặc tạo mới CustomerProfile
+    // Cập nhật hoặc tạo mới CustomerProfile, bao gồm dữ liệu User
     return this.prisma.customerProfile.upsert({
       where: { user_id: userId },
       create: {
@@ -229,6 +285,21 @@ export class AuthService {
         ...(dto.gender !== undefined && { gender: dto.gender }),
         ...(dto.medicalHistory !== undefined && { medical_history: dto.medicalHistory }),
         ...(dto.privacySettings !== undefined && { privacy_settings: dto.privacySettings }),
+      },
+      include: {
+        user: {
+          select: {
+            user_id: true,
+            email: true,
+            full_name: true,
+            phone_number: true,
+            address: true,
+            image: true,
+            role: true,
+            is_verified: true,
+            is_active: true,
+          },
+        },
       },
     });
   }
@@ -398,5 +469,54 @@ export class AuthService {
     }));
   }
 
+  async deleteUser(managerId: string, userId: string): Promise<void> {
+  // Kiểm tra quyền Manager hoặc Admin
+  const manager = await this.prisma.user.findUnique({
+    where: { user_id: managerId },
+  });
+  if (!manager || (manager.role !== Role.Manager && manager.role !== Role.Admin)) {
+    throw new ForbiddenException('Chỉ có Manager hoặc Admin mới có quyền xóa người dùng');
+  }
 
+  // Kiểm tra người dùng tồn tại
+  const user = await this.prisma.user.findUnique({
+    where: { user_id: userId },
+  });
+  if (!user) {
+    throw new NotFoundException('Người dùng không tồn tại');
+  }
+
+  // Không cho phép tự xóa
+  if (managerId === userId) {
+    throw new BadRequestException('Không thể tự xóa tài khoản của chính bạn');
+  }
+
+  // Soft delete người dùng bằng cách cập nhật deleted_at
+  await this.prisma.user.update({
+    where: { user_id: userId },
+    data: { 
+      deleted_at: new Date(),
+      is_active: false, // Đánh dấu không hoạt động
+    },
+  });
+
+  // Soft delete các bảng liên quan (nếu cần)
+  // Ví dụ: CustomerProfile, ConsultantProfile
+  await this.prisma.customerProfile.updateMany({
+    where: { user_id: userId },
+    data: { deleted_at: new Date() },
+  });
+
+  await this.prisma.consultantProfile.updateMany({
+    where: { user_id: userId },
+    data: { deleted_at: new Date() },
+  });
+
+  // Xóa hoặc đánh dấu các token liên quan
+  await this.prisma.token.updateMany({
+    where: { user_id: userId, is_revoked: false },
+    data: { is_revoked: true },
+  });
+
+}
 }

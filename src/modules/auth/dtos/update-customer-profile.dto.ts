@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsDateString, IsEnum } from 'class-validator';
+import { IsOptional, IsString, IsDateString, IsEnum, IsPhoneNumber } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Gender } from '@prisma/client';
 
@@ -40,10 +40,33 @@ export class UpdateCustomerProfileDto {
   privacySettings?: Record<string, any>;
 
   @ApiPropertyOptional({
-    example: 'https://example.com/image.jpg',
-    description: 'URL hoặc đường dẫn ảnh đại diện của người dùng',
+    type: 'string',
+    format: 'binary',
+    description: 'Ảnh đại diện của người dùng (upload file hình ảnh)',
+  })
+  image?: any;
+
+  @ApiPropertyOptional({
+    example: 'Nguyen Van A',
+    description: 'Họ và tên đầy đủ của người dùng',
   })
   @IsOptional()
   @IsString()
-  image?: string;
+  fullName?: string;
+
+  @ApiPropertyOptional({
+    example: '+84912345678',
+    description: 'Số điện thoại của người dùng',
+  })
+  @IsOptional()
+  @IsPhoneNumber()
+  phoneNumber?: string;
+
+  @ApiPropertyOptional({
+    example: '123 Đường Láng, Hà Nội',
+    description: 'Địa chỉ của người dùng',
+  })
+  @IsOptional()
+  @IsString()
+  address?: string;
 }

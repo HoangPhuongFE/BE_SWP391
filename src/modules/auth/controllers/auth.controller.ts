@@ -8,6 +8,8 @@ import {
   UseGuards,
   BadRequestException,
   Patch,
+  Delete,
+  Param,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { Request, Response } from 'express';
@@ -127,7 +129,7 @@ export class AuthController {
   @ApiBearerAuth('access-token')
   @ApiBody({ type: ChangePasswordDto })
   @ApiResponse({ status: 200, description: 'Mật khẩu đã được thay đổi thành công' })
-  @UseGuards(AuthGuard('jwt'))              
+  @UseGuards(AuthGuard('jwt'))
   async changePassword(
     @Req() req,
     @Body() dto: ChangePasswordDto,
@@ -155,7 +157,7 @@ export class AuthController {
   @ApiBody({ type: ChangeRoleDto })
   @ApiResponse({ status: 200, description: 'Vai trò đã được thay đổi thành công' })
   @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Roles(Role.Manager , Role.Admin) 
+  @Roles(Role.Manager, Role.Admin)
   async changeRole(@Req() req: Request & { user?: JwtPayload }, @Body() dto: ChangeRoleDto) {
     console.log('AuthController - req.user:', req.user);
     const managerId = req.user?.sub;
@@ -199,6 +201,8 @@ export class AuthController {
     await this.authService.resetPasswordWithOtp(dto.email, dto.otpCode, dto.newPassword);
     return { message: 'Mật khẩu đã được đặt lại thành công' };
   }
+
+
   @Get('users')
   @ApiOperation({ summary: 'Lấy danh sách toàn bộ người dùng (với hồ sơ nếu có)' })
   @ApiBearerAuth('access-token')
@@ -206,6 +210,24 @@ export class AuthController {
   @Roles(Role.Manager, Role.Admin)
   async getAllUsers() {
     return this.authService.getAllUsersWithProfiles();
+  }
+
+
+  @Delete('users/:id')
+  @ApiOperation({ summary: 'Xóa người dùng (dành cho Manager hoặc Admin)' })
+  @ApiBearerAuth('access-token')
+  @ApiResponse({ status: 200, description: 'Người dùng đã được xóa thành công' })
+  @ApiResponse({ status: 403, description: 'Không có quyền xóa' })
+  @ApiResponse({ status: 404, description: 'Người dùng không tồn tại' })
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(Role.Manager, Role.Admin)
+  async deleteUser(@Param('id') userId: string, @Req() req: Request & { user?: JwtPayload }) {
+    const managerId = req.user?.sub;
+    if (!managerId) {
+      throw new BadRequestException('Không tìm thấy ID quản lý trong token');
+    }
+    await this.authService.deleteUser(managerId, userId);
+    return { message: 'Người dùng đã được xóa thành công' };
   }
 
 }

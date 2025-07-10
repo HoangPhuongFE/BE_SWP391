@@ -1,4 +1,3 @@
-// src/app.module.ts
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { DatabaseModule } from './database/database.module';
@@ -12,12 +11,17 @@ import { PrismaModule } from './prisma/prisma.module';
 import { EmailModule } from './modules/email/email.module';
 import { BlogModule } from './modules/blog/blog.module';
 import { BlogCommentModule } from './modules/blog-comment/blog-comment.module';
-import { ShippingModule } from './modules/shipping/shipping.module'
-
+import { ShippingModule } from './modules/shipping/shipping.module';
+import { CloudinaryModule } from 'nestjs-cloudinary';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    CloudinaryModule.forRoot({
+      cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+      api_key: process.env.CLOUDINARY_API_KEY,
+      api_secret: process.env.CLOUDINARY_API_SECRET,
+    }),
     DatabaseModule,
     AuthModule,
     PrismaModule,

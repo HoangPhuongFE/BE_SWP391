@@ -141,7 +141,7 @@ Cho phép chỉnh sửa thông tin lịch hẹn như thời gian, dịch vụ, g
   }
 
   @Delete(':appointmentId')
-  @Roles(Role.Manager, Role.Admin)
+  @Roles(Role.Manager, Role.Staff)
   @UseGuards(AuthGuard('jwt'))
   @ApiOperation({
     summary: 'Xóa lịch hẹn',

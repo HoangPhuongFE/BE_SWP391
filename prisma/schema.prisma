@@ -302,7 +302,7 @@ model ShippingInfo {
 
   expected_delivery_time DateTime?      // ← GHN trả về
   label_url            String?          // ← GHN trả về (link PDF)
-  
+  deleted_at           DateTime?
   created_at           DateTime         @default(now())
   updated_at           DateTime         @updatedAt
 }
@@ -321,6 +321,7 @@ model ReturnShippingInfo {
   pickup_province       String
   pickup_district       String
   pickup_ward           String
+  deleted_at            DateTime?
   created_at            DateTime      @default(now())
   updated_at            DateTime      @updatedAt
 }
@@ -336,7 +337,7 @@ model AppointmentStatusHistory {
   changed_at      DateTime          @default(now())
   changed_by      String            @db.Char(36)
   changed_by_user User              @relation(fields: [changed_by], references: [user_id])
-
+  deleted_at      DateTime?
   @@index([appointment_id, changed_at])
 }
 
@@ -370,7 +371,7 @@ model TestResultStatusHistory {
   changed_at      DateTime         @default(now())
   changed_by      String           @db.Char(36)
   changed_by_user User             @relation(fields: [changed_by], references: [user_id])
-
+  deleted_at      DateTime?
   @@index([result_id, changed_at])
 }
 
@@ -508,6 +509,7 @@ model Payment {
   created_at     DateTime                 @default(now())
   updated_at     DateTime                 @updatedAt
   expires_at     DateTime?
+  deleted_at     DateTime?
   @@index([appointment_id, status])
   @@index([user_id, status])
 }

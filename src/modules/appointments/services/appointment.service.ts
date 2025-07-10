@@ -588,27 +588,79 @@ export class AppointmentService {
   }
 
   async deleteAppointment(appointmentId: string) {
-    const appointment = await this.prisma.appointment.findUnique({
-      where: { appointment_id: appointmentId, deleted_at: null },
-    });
-    if (!appointment) {
-      throw new BadRequestException('Lịch hẹn không tồn tại');
-    }
+  const appointment = await this.prisma.appointment.findUnique({
+    where: { appointment_id: appointmentId, deleted_at: null },
+    include: {
+      test_result: true,
+      payments: true,
+      shipping_info: true,
+      return_shipping_info: true,
+      status_history: true,
+    },
+  });
 
-    const updatedAppointment = await this.prisma.appointment.update({
-      where: { appointment_id: appointmentId },
+  if (!appointment) {
+    throw new BadRequestException('Lịch hẹn không tồn tại');
+  }
+
+  // Soft-delete Appointment
+  const updatedAppointment = await this.prisma.appointment.update({
+    where: { appointment_id: appointmentId },
+    data: { deleted_at: new Date() },
+  });
+
+  // Soft-delete AppointmentStatusHistory
+  await this.prisma.appointmentStatusHistory.updateMany({
+    where: { appointment_id: appointmentId },
+    data: { deleted_at: new Date() },
+  });
+
+  // Soft-delete TestResult nếu tồn tại
+  if (appointment.test_result) {
+    await this.prisma.testResult.update({
+      where: { result_id: appointment.test_result.result_id },
       data: { deleted_at: new Date() },
     });
 
-    if (appointment.schedule_id) {
-      await this.prisma.schedule.update({
-        where: { schedule_id: appointment.schedule_id },
-        data: { is_booked: false },
-      });
-    }
-
-    return { appointment: updatedAppointment, message: 'Xóa lịch hẹn thành công' };
+    // Soft-delete TestResultStatusHistory
+    await this.prisma.testResultStatusHistory.updateMany({
+      where: { result_id: appointment.test_result.result_id },
+      data: { deleted_at: new Date() },
+    });
   }
+
+  // Soft-delete Payments
+  await this.prisma.payment.updateMany({
+    where: { appointment_id: appointmentId },
+    data: { deleted_at: new Date() },
+  });
+
+  // Soft-delete ShippingInfo nếu tồn tại
+  if (appointment.shipping_info) {
+    await this.prisma.shippingInfo.update({
+      where: { id: appointment.shipping_info.id },
+      data: { deleted_at: new Date() },
+    });
+  }
+
+  // Soft-delete ReturnShippingInfo nếu tồn tại
+  if (appointment.return_shipping_info) {
+    await this.prisma.returnShippingInfo.update({
+      where: { id: appointment.return_shipping_info.id },
+      data: { deleted_at: new Date() },
+    });
+  }
+
+  // Mở lại Schedule nếu có
+  if (appointment.schedule_id) {
+    await this.prisma.schedule.update({
+      where: { schedule_id: appointment.schedule_id },
+      data: { is_booked: false },
+    });
+  }
+
+  return { appointment: updatedAppointment, message: 'Xóa lịch hẹn thành công' };
+}
 
   async getTestResult(testCode: string, userId: string) {
     const result = await this.prisma.$transaction(async (prisma) => {

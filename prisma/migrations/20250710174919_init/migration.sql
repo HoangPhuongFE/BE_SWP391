@@ -5,6 +5,7 @@ CREATE TABLE `User` (
     `password_hash` VARCHAR(255) NOT NULL,
     `role` ENUM('Guest', 'Customer', 'Consultant', 'Staff', 'Manager', 'Admin', 'System') NOT NULL DEFAULT 'Customer',
     `full_name` VARCHAR(100) NULL,
+    `image` VARCHAR(255) NULL,
     `phone_number` VARCHAR(20) NULL,
     `address` VARCHAR(191) NULL,
     `is_verified` BOOLEAN NOT NULL DEFAULT false,
@@ -153,6 +154,7 @@ CREATE TABLE `ShippingInfo` (
     `ward` VARCHAR(191) NOT NULL,
     `expected_delivery_time` DATETIME(3) NULL,
     `label_url` VARCHAR(191) NULL,
+    `deleted_at` DATETIME(3) NULL,
     `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updated_at` DATETIME(3) NOT NULL,
 
@@ -173,6 +175,7 @@ CREATE TABLE `ReturnShippingInfo` (
     `pickup_province` VARCHAR(191) NOT NULL,
     `pickup_district` VARCHAR(191) NOT NULL,
     `pickup_ward` VARCHAR(191) NOT NULL,
+    `deleted_at` DATETIME(3) NULL,
     `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updated_at` DATETIME(3) NOT NULL,
 
@@ -188,6 +191,7 @@ CREATE TABLE `AppointmentStatusHistory` (
     `notes` VARCHAR(255) NULL,
     `changed_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `changed_by` CHAR(36) NOT NULL,
+    `deleted_at` DATETIME(3) NULL,
 
     INDEX `AppointmentStatusHistory_appointment_id_changed_at_idx`(`appointment_id`, `changed_at`),
     PRIMARY KEY (`history_id`)
@@ -223,6 +227,7 @@ CREATE TABLE `TestResultStatusHistory` (
     `notes` VARCHAR(255) NULL,
     `changed_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `changed_by` CHAR(36) NOT NULL,
+    `deleted_at` DATETIME(3) NULL,
 
     INDEX `TestResultStatusHistory_result_id_changed_at_idx`(`result_id`, `changed_at`),
     PRIMARY KEY (`history_id`)
@@ -363,6 +368,7 @@ CREATE TABLE `Payment` (
     `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updated_at` DATETIME(3) NOT NULL,
     `expires_at` DATETIME(3) NULL,
+    `deleted_at` DATETIME(3) NULL,
 
     UNIQUE INDEX `Payment_order_code_key`(`order_code`),
     INDEX `Payment_appointment_id_status_idx`(`appointment_id`, `status`),

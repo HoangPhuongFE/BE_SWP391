@@ -552,27 +552,7 @@ async function main() {
       });
     }
 
-    // Questions
-    const questionStatuses: QuestionStatus[] = ['Pending', 'Answered', 'Rejected'];
-    for (let i = 0; i < 10; i++) {
-      const customer = customers[Math.floor(Math.random() * customers.length)];
-      const consultant = consultants[Math.floor(Math.random() * consultants.length)];
-      const status = questionStatuses[Math.floor(Math.random() * questionStatuses.length)];
-
-      await prisma.question.create({
-        data: {
-          user_id: customer.user_id,
-          consultant_id: status === 'Answered' ? consultant.consultant_id : null,
-          title: `Câu hỏi ${i + 1} về ${servicesCreated[i % servicesCreated.length].name}`,
-          content: `Thông tin chi tiết về ${servicesCreated[i % servicesCreated.length].name}?`,
-          is_public: Math.random() > 0.5,
-          is_anonymous: Math.random() > 0.7,
-          status: status,
-          answer: status === 'Answered' ? `Câu trả lời chi tiết về ${servicesCreated[i % servicesCreated.length].name}.` : null,
-          category: ['STI', 'Fertility', 'General'][Math.floor(Math.random() * 3)],
-        },
-      });
-    }
+   
 
       console.log('Chạy được rồi "Cạp Cạp"');
     }

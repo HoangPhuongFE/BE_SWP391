@@ -28,7 +28,7 @@ export class AuthService {
     picture?: string;
   }) {
     const { email, name } = userData;
-    if (!email) throw new BadRequestException('Email is required');
+    if (!email) throw new BadRequestException('Email là bắt buộc');
 
     let user = await this.prisma.user.findUnique({ where: { email } });
     if (!user) {
@@ -59,14 +59,14 @@ export class AuthService {
   async validateUser(email: string, password: string) {
     const user = await this.prisma.user.findUnique({ where: { email } });
     if (!user || !user.is_active) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new UnauthorizedException('Thông tin xác thực không hợp lệ');
     }
     if (!user.password_hash) {
-      throw new UnauthorizedException('Please set a password first');
+      throw new UnauthorizedException('Vui lòng đặt mật khẩu trước');
     }
     const match = await bcrypt.compare(password, user.password_hash);
     if (!match) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new UnauthorizedException('Thông tin xác thực không hợp lệ');
     }
     return user;
   }
@@ -74,10 +74,10 @@ export class AuthService {
   async setPassword(email: string, newPassword: string) {
     const user = await this.prisma.user.findUnique({ where: { email } });
     if (!user) {
-      throw new BadRequestException('User not found');
+      throw new BadRequestException('Không tìm thấy người dùng');
     }
     if (user.password_hash) {
-      throw new BadRequestException('Password already set');
+      throw new BadRequestException('Mật khẩu đã được đặt');
     }
     const hash = await bcrypt.hash(newPassword, 10);
     await this.prisma.user.update({
@@ -117,7 +117,7 @@ export class AuthService {
   async register(email: string, password: string, fullName: string) {
     const exists = await this.prisma.user.findUnique({ where: { email } });
     if (exists) {
-      throw new BadRequestException('Email already in use');
+      throw new BadRequestException('Email đã được sử dụng');
     }
 
     const hash = await bcrypt.hash(password, 10);

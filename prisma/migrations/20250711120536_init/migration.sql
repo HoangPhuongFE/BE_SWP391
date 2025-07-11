@@ -64,7 +64,7 @@ CREATE TABLE `ConsultantProfile` (
     `deleted_at` DATETIME(3) NULL,
 
     UNIQUE INDEX `ConsultantProfile_user_id_key`(`user_id`),
-    INDEX `ConsultantProfile_is_verified_idx`(`is_verified`),
+    INDEX `ConsultantProfile_is_verified_specialization_idx`(`is_verified`, `specialization`),
     PRIMARY KEY (`consultant_id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -237,18 +237,20 @@ CREATE TABLE `TestResultStatusHistory` (
 CREATE TABLE `Question` (
     `question_id` CHAR(36) NOT NULL,
     `user_id` CHAR(36) NOT NULL,
-    `consultant_id` CHAR(36) NULL,
+    `consultant_id` CHAR(36) NOT NULL,
     `title` VARCHAR(255) NOT NULL,
     `content` TEXT NOT NULL,
     `is_public` BOOLEAN NOT NULL DEFAULT false,
     `is_anonymous` BOOLEAN NOT NULL DEFAULT false,
-    `status` ENUM('Pending', 'Answered', 'Rejected') NOT NULL DEFAULT 'Pending',
+    `image_url` VARCHAR(255) NULL,
+    `status` ENUM('Pending', 'Answered', 'Deleted') NOT NULL DEFAULT 'Pending',
     `answer` TEXT NULL,
     `category` VARCHAR(50) NULL,
     `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updated_at` DATETIME(3) NOT NULL,
     `deleted_at` DATETIME(3) NULL,
 
+    INDEX `Question_user_id_status_consultant_id_idx`(`user_id`, `status`, `consultant_id`),
     PRIMARY KEY (`question_id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -313,7 +315,7 @@ CREATE TABLE `BlogComment` (
 CREATE TABLE `Notification` (
     `notification_id` CHAR(36) NOT NULL,
     `user_id` CHAR(36) NOT NULL,
-    `type` ENUM('Email', 'Push', 'SMS') NOT NULL,
+    `type` ENUM('Email', 'Push') NOT NULL,
     `title` VARCHAR(255) NOT NULL,
     `content` TEXT NOT NULL,
     `status` ENUM('Pending', 'Sent', 'Failed') NOT NULL DEFAULT 'Pending',
@@ -458,7 +460,7 @@ ALTER TABLE `TestResultStatusHistory` ADD CONSTRAINT `TestResultStatusHistory_ch
 ALTER TABLE `Question` ADD CONSTRAINT `Question_user_id_fkey` FOREIGN KEY (`user_id`) REFERENCES `User`(`user_id`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE `Question` ADD CONSTRAINT `Question_consultant_id_fkey` FOREIGN KEY (`consultant_id`) REFERENCES `ConsultantProfile`(`consultant_id`) ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE `Question` ADD CONSTRAINT `Question_consultant_id_fkey` FOREIGN KEY (`consultant_id`) REFERENCES `ConsultantProfile`(`consultant_id`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `Feedback` ADD CONSTRAINT `Feedback_user_id_fkey` FOREIGN KEY (`user_id`) REFERENCES `User`(`user_id`) ON DELETE RESTRICT ON UPDATE CASCADE;

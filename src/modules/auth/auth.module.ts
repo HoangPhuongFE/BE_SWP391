@@ -33,7 +33,7 @@ import { RolesGuard } from './guards/roles.guard';
     GoogleStrategy,
     LocalStrategy,
     JwtStrategy,
-    RolesGuard, // Giữ RolesGuard làm provider, nhưng không dùng toàn cục
+    RolesGuard,
   ],
 })
 export class AuthModule {}

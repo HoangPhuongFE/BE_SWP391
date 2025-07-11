@@ -52,7 +52,7 @@ enum TestResultStatus {
 enum QuestionStatus {
   Pending
   Answered
-  Rejected
+  Deleted
 }
 
 enum BlogCommentStatus {
@@ -70,7 +70,6 @@ enum FeedbackStatus {
 enum NotificationType {
   Email
   Push
-  SMS
 }
 
 enum NotificationStatus {
@@ -200,9 +199,8 @@ model ConsultantProfile {
   appointments   Appointment[] // Quan hệ 1-nhiều với Appointment
   questions      Question[] // Quan hệ 1-nhiều với Question
   feedback       Feedback[] // Quan hệ 1-nhiều với Feedback
-  schedules      Schedule[]    @relation("ConsultantSchedule") // Quan hệ ngược với Schedule
-
-  @@index([is_verified])
+  schedules      Schedule[]    @relation("ConsultantSchedule") 
+  @@index([is_verified, specialization])
 }
 
 // MenstrualCycle: Theo dõi chu kỳ kinh nguyệt
@@ -379,18 +377,20 @@ model Question {
   question_id   String             @id @default(uuid()) @db.Char(36)
   user_id       String             @db.Char(36)
   user          User               @relation(fields: [user_id], references: [user_id])
-  consultant_id String?            @db.Char(36)
+  consultant_id String            @db.Char(36)
   consultant    ConsultantProfile? @relation(fields: [consultant_id], references: [consultant_id])
   title         String             @db.VarChar(255)
   content       String             @db.Text
   is_public     Boolean            @default(false)
   is_anonymous  Boolean            @default(false)
+  image_url     String?        @db.VarChar(255)
   status        QuestionStatus     @default(Pending)
   answer        String?            @db.Text
   category      String?            @db.VarChar(50)
   created_at    DateTime           @default(now())
   updated_at    DateTime           @updatedAt
   deleted_at    DateTime?
+  @@index([user_id, status, consultant_id])
 }
 
 model Feedback {

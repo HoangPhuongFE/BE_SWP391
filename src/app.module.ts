@@ -1,5 +1,6 @@
+// src/app.module.ts
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { DatabaseModule } from './database/database.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { CycleModule } from './modules/cycles/cycle.module';
@@ -12,15 +13,19 @@ import { EmailModule } from './modules/email/email.module';
 import { BlogModule } from './modules/blog/blog.module';
 import { BlogCommentModule } from './modules/blog-comment/blog-comment.module';
 import { ShippingModule } from './modules/shipping/shipping.module';
+import { QuestionsModule } from './modules/questions/questions.module';
 import { CloudinaryModule } from 'nestjs-cloudinary';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
-    CloudinaryModule.forRoot({
-      cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-      api_key: process.env.CLOUDINARY_API_KEY,
-      api_secret: process.env.CLOUDINARY_API_SECRET,
+    CloudinaryModule.forRootAsync({
+      useFactory: (configService: ConfigService) => ({
+        cloud_name: configService.get('CLOUDINARY_CLOUD_NAME'),
+        api_key: configService.get('CLOUDINARY_API_KEY'),
+        api_secret: configService.get('CLOUDINARY_API_SECRET'),
+      }),
+      inject: [ConfigService],
     }),
     DatabaseModule,
     AuthModule,
@@ -34,6 +39,7 @@ import { CloudinaryModule } from 'nestjs-cloudinary';
     BlogModule,
     BlogCommentModule,
     ShippingModule,
+    QuestionsModule,
   ],
 })
 export class AppModule {}

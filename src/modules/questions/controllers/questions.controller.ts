@@ -41,9 +41,9 @@ export class QuestionsController {
     @ApiOperation({
         summary: 'Customer tạo câu hỏi mới và gửi đến tư vấn viên',
         description: `
-Tạo một câu hỏi và gửi đến Consultant được chọn. Khách hàng phải chọn Consultant từ danh sách dựa trên chuyên môn. Hình ảnh có thể được đính kèm để hỗ trợ tư vấn.
-- Hệ thống kiểm tra quyền và Consultant hợp lệ.
-- Gửi email thông báo cho Consultant.
+Tạo một câu hỏi và gửi đến Tư vấn viên được chọn. Khách hàng phải chọn Tư vấn viên từ danh sách dựa trên chuyên môn. Hình ảnh có thể được đính kèm để hỗ trợ tư vấn.
+- Hệ thống kiểm tra quyền và Tư vấn viên hợp lệ.
+- Gửi email thông báo cho Tư vấn viên.
 - Giới hạn kích thước hình ảnh tối đa 5MB.
 - Tất cả câu hỏi được tạo mặc định là ẩn danh.
 `,
@@ -88,7 +88,7 @@ Body (dùng form-data):
             content,
             consultant_id,
             category,
-            image, // Gán image nếu có
+            image,
         };
         return this.questionsService.createQuestion(userId, dto);
     }
@@ -128,7 +128,7 @@ Consultant xóa câu hỏi nếu hình ảnh hoặc nội dung không phù hợp
         const userId = (req.user as any).userId;
         return this.questionsService.deleteQuestion(id, userId, reason);
     }
-
+    
     @Patch(':id')
     @Roles(Role.Customer)
     @UseGuards(AuthGuard('jwt'))
@@ -146,25 +146,7 @@ Khách hàng cập nhật tiêu đề hoặc nội dung câu hỏi khi trạng t
         return this.questionsService.updateQuestion(id, userId, dto);
     }
 
-    @Get(':id')
-    @UseGuards(AuthGuard('jwt'))
-    @ApiOperation({
-        summary: 'Xem chi tiết câu hỏi',
-        description: `
-Trả về thông tin chi tiết của một câu hỏi. 
-- Customer: Chỉ xem câu hỏi của mình.
-- Consultant: Chỉ xem câu hỏi được gán.
-- Staff/Manager: Xem tất cả.
-`,
-    })
-    @ApiBearerAuth('access-token')
-    @ApiParam({ name: 'id', description: 'ID câu hỏi', type: String })
-    async getQuestionById(@Param('id') id: string, @Req() req) {
-        const userId = (req.user as any).userId;
-        const role = (req.user as any).role;
-        return this.questionsService.getQuestionById(id, userId, role);
-    }
-
+    // GET endpoints - sắp xếp từ cụ thể đến tổng quát
     @Get('my')
     @Roles(Role.Customer)
     @UseGuards(AuthGuard('jwt'))
@@ -194,6 +176,25 @@ Trả về danh sách tất cả câu hỏi được gán cho Consultant hiện 
     async getAssignedQuestions(@Req() req) {
         const userId = (req.user as any).userId;
         return this.questionsService.getAssignedQuestions(userId);
+    }
+
+    @Get(':id')
+    @UseGuards(AuthGuard('jwt'))
+    @ApiOperation({
+        summary: 'Xem chi tiết câu hỏi',
+        description: `
+Trả về thông tin chi tiết của một câu hỏi. 
+- Customer: Chỉ xem câu hỏi của mình.
+- Consultant: Chỉ xem câu hỏi được gán.
+- Staff/Manager: Xem tất cả.
+`,
+    })
+    @ApiBearerAuth('access-token')
+    @ApiParam({ name: 'id', description: 'ID câu hỏi', type: String })
+    async getQuestionById(@Param('id') id: string, @Req() req) {
+        const userId = (req.user as any).userId;
+        const role = (req.user as any).role;
+        return this.questionsService.getQuestionById(id, userId, role);
     }
 
     @Get()

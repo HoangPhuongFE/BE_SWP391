@@ -216,7 +216,7 @@ export class QuestionsService {
       message: 'Lấy danh sách câu hỏi thành công',
     };
   }
-async getAssignedQuestions(userId: string) {
+  async getAssignedQuestions(userId: string) {
     const consultant = await this.prisma.consultantProfile.findFirst({
       where: { user_id: userId },
     });
@@ -255,7 +255,7 @@ async getAssignedQuestions(userId: string) {
       })),
       message: 'Lấy danh sách câu hỏi được gán thành công',
     };
-  } 
+  }
   async getQuestionById(questionId: string, userId: string, role: Role) {
     const question = await this.prisma.question.findUnique({
       where: { question_id: questionId, deleted_at: null },
@@ -351,5 +351,5 @@ async getAssignedQuestions(userId: string) {
     };
   }
 
-  
+
 }

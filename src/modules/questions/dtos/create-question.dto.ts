@@ -11,7 +11,7 @@ export class CreateQuestionDto {
   @IsString()
   content: string;
 
-  @ApiProperty({ example: 'con001', description: 'ID của Consultant được chọn' })
+  @ApiProperty({ example: 'CO', description: 'ID của Tư vấn viên được chọn' })
   @IsString()
   consultant_id: string;
 

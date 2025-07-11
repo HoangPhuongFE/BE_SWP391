@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, Logger, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { Injectable, BadRequestException, Logger, ForbiddenException, NotFoundException, Body, Req } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { PaymentService } from '../../payment/services/payment.service';
 import { CreateAppointmentDto } from '../dtos/create-appointment.dto';
@@ -7,6 +7,7 @@ import { UpdateAppointmentDto } from '../dtos/update-appointment.dto';
 import { UpdateAppointmentStatusDto } from '../dtos/update-appointment-status.dto';
 import { CreatePaymentDto } from '../../payment/dtos/create-payment.dto';
 import { CreateFeedbackDto } from '../dtos/create-feedback.dto';
+import { GetResultsDto } from '../dtos/get-results.dto';
 import { AppointmentStatus, Role, PaymentMethod, TestResultStatus, ServiceType, FeedbackStatus, PaymentTransactionStatus } from '@prisma/client';
 import { ConfirmAppointmentDto } from '../dtos/confirm-appointment.dto';
 import { ServiceMode } from '@modules/services/dtos/create-service.dto';
@@ -588,79 +589,79 @@ export class AppointmentService {
   }
 
   async deleteAppointment(appointmentId: string) {
-  const appointment = await this.prisma.appointment.findUnique({
-    where: { appointment_id: appointmentId, deleted_at: null },
-    include: {
-      test_result: true,
-      payments: true,
-      shipping_info: true,
-      return_shipping_info: true,
-      status_history: true,
-    },
-  });
+    const appointment = await this.prisma.appointment.findUnique({
+      where: { appointment_id: appointmentId, deleted_at: null },
+      include: {
+        test_result: true,
+        payments: true,
+        shipping_info: true,
+        return_shipping_info: true,
+        status_history: true,
+      },
+    });
 
-  if (!appointment) {
-    throw new BadRequestException('Lịch hẹn không tồn tại');
-  }
+    if (!appointment) {
+      throw new BadRequestException('Lịch hẹn không tồn tại');
+    }
 
-  // Soft-delete Appointment
-  const updatedAppointment = await this.prisma.appointment.update({
-    where: { appointment_id: appointmentId },
-    data: { deleted_at: new Date() },
-  });
-
-  // Soft-delete AppointmentStatusHistory
-  await this.prisma.appointmentStatusHistory.updateMany({
-    where: { appointment_id: appointmentId },
-    data: { deleted_at: new Date() },
-  });
-
-  // Soft-delete TestResult nếu tồn tại
-  if (appointment.test_result) {
-    await this.prisma.testResult.update({
-      where: { result_id: appointment.test_result.result_id },
+    // Soft-delete Appointment
+    const updatedAppointment = await this.prisma.appointment.update({
+      where: { appointment_id: appointmentId },
       data: { deleted_at: new Date() },
     });
 
-    // Soft-delete TestResultStatusHistory
-    await this.prisma.testResultStatusHistory.updateMany({
-      where: { result_id: appointment.test_result.result_id },
+    // Soft-delete AppointmentStatusHistory
+    await this.prisma.appointmentStatusHistory.updateMany({
+      where: { appointment_id: appointmentId },
       data: { deleted_at: new Date() },
     });
-  }
 
-  // Soft-delete Payments
-  await this.prisma.payment.updateMany({
-    where: { appointment_id: appointmentId },
-    data: { deleted_at: new Date() },
-  });
+    // Soft-delete TestResult nếu tồn tại
+    if (appointment.test_result) {
+      await this.prisma.testResult.update({
+        where: { result_id: appointment.test_result.result_id },
+        data: { deleted_at: new Date() },
+      });
 
-  // Soft-delete ShippingInfo nếu tồn tại
-  if (appointment.shipping_info) {
-    await this.prisma.shippingInfo.update({
-      where: { id: appointment.shipping_info.id },
+      // Soft-delete TestResultStatusHistory
+      await this.prisma.testResultStatusHistory.updateMany({
+        where: { result_id: appointment.test_result.result_id },
+        data: { deleted_at: new Date() },
+      });
+    }
+
+    // Soft-delete Payments
+    await this.prisma.payment.updateMany({
+      where: { appointment_id: appointmentId },
       data: { deleted_at: new Date() },
     });
-  }
 
-  // Soft-delete ReturnShippingInfo nếu tồn tại
-  if (appointment.return_shipping_info) {
-    await this.prisma.returnShippingInfo.update({
-      where: { id: appointment.return_shipping_info.id },
-      data: { deleted_at: new Date() },
-    });
-  }
+    // Soft-delete ShippingInfo nếu tồn tại
+    if (appointment.shipping_info) {
+      await this.prisma.shippingInfo.update({
+        where: { id: appointment.shipping_info.id },
+        data: { deleted_at: new Date() },
+      });
+    }
 
-  // Mở lại Schedule nếu có
-  if (appointment.schedule_id) {
-    await this.prisma.schedule.update({
-      where: { schedule_id: appointment.schedule_id },
-      data: { is_booked: false },
-    });
-  }
+    // Soft-delete ReturnShippingInfo nếu tồn tại
+    if (appointment.return_shipping_info) {
+      await this.prisma.returnShippingInfo.update({
+        where: { id: appointment.return_shipping_info.id },
+        data: { deleted_at: new Date() },
+      });
+    }
 
-  return { appointment: updatedAppointment, message: 'Xóa lịch hẹn thành công' };
-}
+    // Mở lại Schedule nếu có
+    if (appointment.schedule_id) {
+      await this.prisma.schedule.update({
+        where: { schedule_id: appointment.schedule_id },
+        data: { is_booked: false },
+      });
+    }
+
+    return { appointment: updatedAppointment, message: 'Xóa lịch hẹn thành công' };
+  }
 
   async getTestResult(testCode: string, userId: string) {
     const result = await this.prisma.$transaction(async (prisma) => {
@@ -1047,4 +1048,110 @@ export class AppointmentService {
     };
   }
 
+  async getResults(body: GetResultsDto, userId: string) {
+    const { testCode, fullName } = body;
+
+    const user = await this.prisma.user.findUnique({ where: { user_id: userId }, select: { full_name: true } });
+    if (!user || user.full_name !== fullName) {
+      throw new ForbiddenException('Tên không khớp với thông tin người dùng');
+    }
+
+    const testResult = await this.prisma.testResult.findUnique({
+      where: { test_code: testCode },
+      include: {
+        appointment: {
+          include: {
+            service: { select: { service_id: true, name: true, category: true } },
+            consultant: { include: { user: { select: { full_name: true } } } },
+            shipping_info: true,
+            payments: { select: { amount: true, payment_method: true, status: true, created_at: true } },
+            user: { select: { full_name: true, email: true, phone_number: true } },
+          },
+        },
+      },
+    });
+
+    if (!testResult) {
+      throw new NotFoundException('Mã xét nghiệm không tồn tại');
+    }
+    if (testResult.appointment.user_id !== userId) {
+      throw new ForbiddenException('Bạn không có quyền xem kết quả này');
+    }
+
+    const appointmentStatusHistory = await this.prisma.appointmentStatusHistory.findMany({
+      where: { appointment_id: testResult.appointment.appointment_id },
+      orderBy: { changed_at: 'asc' },
+      select: { status: true, notes: true, changed_at: true, changed_by_user: { select: { full_name: true } } },
+    });
+
+    let testResultData: {
+      result_id: string;
+      test_code: string;
+      result_data: string;
+      status: typeof TestResultStatus[keyof typeof TestResultStatus];
+      is_abnormal: boolean;
+      notes: string | null;
+      updated_at: Date;
+      viewed_at: Date | null;
+    } | null = {
+      result_id: testResult.result_id,
+      test_code: testResult.test_code,
+      result_data: testResult.status === TestResultStatus.Completed ? testResult.result_data : 'Pending',
+      status: testResult.status,
+      is_abnormal: testResult.is_abnormal,
+      notes: testResult.notes,
+      updated_at: testResult.updated_at,
+      viewed_at: testResult.viewed_at,
+    };
+    const testResultStatusHistory = await this.prisma.testResultStatusHistory.findMany({
+      where: { result_id: testResult.result_id },
+      orderBy: { changed_at: 'asc' },
+      select: { status: true, notes: true, changed_at: true, changed_by_user: { select: { full_name: true } } },
+    });
+
+    if (testResult.status === TestResultStatus.Completed && !testResult.viewed_at) {
+      await this.prisma.testResult.update({
+        where: { result_id: testResult.result_id },
+        data: { viewed_at: new Date() },
+      });
+    }
+
+    await this.prisma.auditLog.create({
+      data: {
+        user_id: userId,
+        action: 'VIEW_TEST_RESULT',
+        entity_type: 'TestResult',
+        entity_id: testResult.result_id,
+        details: { testCode },
+      },
+    });
+
+    return {
+      appointment: {
+        appointment_id: testResult.appointment.appointment_id,
+        type: testResult.appointment.type,
+        start_time: testResult.appointment.start_time,
+        end_time: testResult.appointment.end_time,
+        status: testResult.appointment.status,
+        payment_status: testResult.appointment.payment_status,
+        location: testResult.appointment.location,
+        mode: testResult.appointment.mode,
+        service: testResult.appointment.service,
+        consultant_name: testResult.appointment.consultant?.user?.full_name || null,
+        shipping_info: testResult.appointment.mode === ServiceMode.AT_HOME ? testResult.appointment.shipping_info : null,
+        payments: testResult.appointment.payments,
+      },
+      testResult: testResultData,
+      appointmentStatusHistory,
+      testResultStatusHistory,
+      basic_info: {
+        full_name: testResult.appointment.user.full_name,
+        email: testResult.appointment.user.email,
+        phone_number: testResult.appointment.user.phone_number,
+      },
+      message: testResultData.status === TestResultStatus.Completed
+        ? 'Lấy kết quả xét nghiệm và thông tin lịch hẹn thành công'
+        : 'Kết quả xét nghiệm chưa sẵn sàng',
+    };
+  }
 }

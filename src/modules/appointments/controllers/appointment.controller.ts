@@ -27,6 +27,7 @@ import { Roles } from '../../auth/decorators/roles.decorator';
 import { Role } from '@prisma/client';
 import { ConfirmAppointmentDto } from '../dtos/confirm-appointment.dto';
 import { CreateFeedbackDto } from '../dtos/create-feedback.dto';
+import { GetResultsDto } from '../dtos/get-results.dto';
 
 @ApiTags('Appointments')
 @Controller('appointments')
@@ -263,4 +264,23 @@ Trả về thông tin chi tiết lịch hẹn bao gồm lịch sử trạng thá
     const role = (req.user as any).role;
     return this.appointmentService.getAppointmentById(appointmentId, userId, role);
   }
+
+ @Post('results')
+@Roles(Role.Customer)
+@UseGuards(AuthGuard('jwt'))
+@ApiOperation({
+  summary: 'Xem kết quả xét nghiệm bằng mã xét nghiệm với xác nhận tên',
+  description: `
+Cho phép khách hàng nhập mã xét nghiệm (test_code) cùng với tên đầy đủ để xác nhận quyền sở hữu và xem kết quả xét nghiệm.  
+- Hệ thống kiểm tra tên khớp với thông tin người dùng và trạng thái kết quả (đã hoàn tất hoặc chưa).`,
+})
+@ApiBearerAuth('access-token')
+@ApiBody({
+  type: GetResultsDto,
+  description: 'Dữ liệu đầu vào gồm mã xét nghiệm và tên đầy đủ',
+})
+async getResults(@Body() body: GetResultsDto, @Req() req) {
+  const userId = (req.user as any).userId;
+  return this.appointmentService.getResults(body, userId);
+}
 }

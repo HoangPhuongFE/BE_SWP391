@@ -14,8 +14,9 @@ import { BlogModule } from './modules/blog/blog.module';
 import { BlogCommentModule } from './modules/blog-comment/blog-comment.module';
 import { ShippingModule } from './modules/shipping/shipping.module';
 import { QuestionsModule } from './modules/questions/questions.module';
-import { CloudinaryModule } from 'nestjs-cloudinary';
+import { StatsModule } from './modules/stats/stats.module';
 
+import { CloudinaryModule } from 'nestjs-cloudinary';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
@@ -40,6 +41,7 @@ import { CloudinaryModule } from 'nestjs-cloudinary';
     BlogCommentModule,
     ShippingModule,
     QuestionsModule,
+    StatsModule,
   ],
 })
 export class AppModule {}

@@ -152,6 +152,7 @@ model User {
   test_result_status_history TestResultStatusHistory[] // Quan hệ ngược
 
   @@index([email])
+  @@index([role, is_active, created_at]) 
 }
 
 // Token: Quản lý refresh token cho xác thực
@@ -221,6 +222,7 @@ model MenstrualCycle {
   deleted_at            DateTime?
 
   @@index([user_id, start_date])
+  @@index([start_date]) 
 }
 
 // Service: Quản lý dịch vụ (xét nghiệm STIs, tư vấn)
@@ -281,6 +283,10 @@ model Appointment {
   return_shipping_info ReturnShippingInfo?  // Chiều trả mẫu
   mode ServiceMode? 
   @@index([mode])
+  @@index([status, created_at]) // Hỗ trợ lọc trạng thái và thời gian trong appointments/stats
+  @@index([service_id, user_id]) // Hỗ trợ customers/service-usage và services/stats
+  @@index([consultant_id]) // Tối ưu join với ConsultantProfile trong feedback/stats
+
 }
 
 model ShippingInfo {
@@ -358,6 +364,7 @@ model TestResult {
 
   @@index([status])
   @@index([viewed_at])
+  @@index([status, created_at]) 
 }
 
 model TestResultStatusHistory {
@@ -390,7 +397,9 @@ model Question {
   created_at    DateTime           @default(now())
   updated_at    DateTime           @updatedAt
   deleted_at    DateTime?
-  @@index([user_id, status, consultant_id])
+  @@index([user_id, status, consultant_id  ])
+  @@index([status, category, consultant_id])
+
 }
 
 model Feedback {
@@ -414,6 +423,7 @@ model Feedback {
 
   @@index([user_id, status])
   @@index([consultant_id, status])
+  @@index([status, created_at]) 
 }
 
 model BlogPost {
@@ -512,6 +522,7 @@ model Payment {
   deleted_at     DateTime?
   @@index([appointment_id, status])
   @@index([user_id, status])
+  @@index([status, created_at, payment_method]) 
 }
 
 model Schedule {
@@ -539,7 +550,6 @@ model OtpCode {
   expiresAt DateTime
   isUsed    Boolean  @default(false)
   createdAt DateTime @default(now())
-
   @@index([email])
 }
 

@@ -23,15 +23,13 @@ export class StatsController {
   @ApiOperation({
     summary: 'Thống kê lịch hẹn',
     description: `
-Trả về thống kê lịch hẹn theo trạng thái, loại, và thời gian. Hỗ trợ lọc theo ngày bắt đầu, ngày kết thúc, loại, và trạng thái.
-- Tổng số (total) cho phép tính phần trăm trên FE.
-- Dữ liệu byDate hỗ trợ biểu đồ theo ngày/tháng/quý/năm.`,
+Trả về thống kê lịch hẹn với dữ liệu thô (status, type, created_at). Hỗ trợ lọc theo ngày bắt đầu, ngày kết thúc, loại, và trạng thái.
+- Tổng số (total) cho phép tính phần trăm trên FE.`,
   })
   @ApiQuery({ name: 'startDate', required: false, type: String, description: 'Ngày bắt đầu (YYYY-MM-DD)' })
   @ApiQuery({ name: 'endDate', required: false, type: String, description: 'Ngày kết thúc (YYYY-MM-DD)' })
   @ApiQuery({ name: 'type', required: false, type: String, description: 'Loại lịch hẹn (Consultation/Testing)' })
   @ApiQuery({ name: 'status', required: false, type: String, description: 'Trạng thái lịch hẹn' })
-  @ApiQuery({ name: 'groupBy', required: false, enum: ['day', 'month', 'quarter', 'year'], description: 'Nhóm theo ngày/tháng/quý/năm' })
   async getAppointmentStats(@Query() query: StatsQueryDto) {
     return this.statsService.getAppointmentStats(query);
   }
@@ -40,7 +38,7 @@ Trả về thống kê lịch hẹn theo trạng thái, loại, và thời gian.
   @ApiOperation({
     summary: 'Thống kê kết quả xét nghiệm',
     description: `
-Trả về thống kê kết quả xét nghiệm theo trạng thái (bình thường/bất thường) và danh mục. Hỗ trợ lọc theo ngày và danh mục.
+Trả về thống kê kết quả xét nghiệm với dữ liệu thô (is_abnormal, service_id, created_at). Hỗ trợ lọc theo ngày và danh mục.
 - Tổng số (total) dùng để tính phần trăm trên FE.`,
   })
   @ApiQuery({ name: 'startDate', required: false, type: String, description: 'Ngày bắt đầu (YYYY-MM-DD)' })
@@ -54,7 +52,7 @@ Trả về thống kê kết quả xét nghiệm theo trạng thái (bình thư�
   @ApiOperation({
     summary: 'Thống kê sử dụng dịch vụ',
     description: `
-Trả về thống kê số lượng lịch hẹn theo danh mục và dịch vụ. Hỗ trợ lọc theo ngày, danh mục, và ID dịch vụ.
+Trả về thống kê sử dụng dịch vụ với dữ liệu thô (service_id, created_at). Hỗ trợ lọc theo ngày, danh mục, và ID dịch vụ.
 - Tổng số (total) hỗ trợ tính phần trăm trên FE.`,
   })
   @ApiQuery({ name: 'startDate', required: false, type: String, description: 'Ngày bắt đầu (YYYY-MM-DD)' })
@@ -65,12 +63,11 @@ Trả về thống kê số lượng lịch hẹn theo danh mục và dịch v�
     return this.statsService.getServiceStats(query);
   }
 
-
   @Get('cycles')
   @ApiOperation({
     summary: 'Thống kê chu kỳ kinh nguyệt',
     description: `
-Trả về thống kê độ dài chu kỳ, thời kỳ kinh nguyệt, số chu kỳ bất thường, và triệu chứng phổ biến. Hỗ trợ lọc theo ngày.
+Trả về thống kê chu kỳ với dữ liệu thô (start_date, cycle_length, period_length, symptoms). Hỗ trợ lọc theo ngày.
 - Tổng số (total) hỗ trợ tính phần trăm trên FE.`,
   })
   @ApiQuery({ name: 'startDate', required: false, type: String, description: 'Ngày bắt đầu (YYYY-MM-DD)' })
@@ -83,7 +80,7 @@ Trả về thống kê độ dài chu kỳ, thời kỳ kinh nguyệt, số chu 
   @ApiOperation({
     summary: 'Thống kê người dùng',
     description: `
-Trả về thống kê người dùng theo vai trò, trạng thái hoạt động, và thời gian đăng ký. Hỗ trợ lọc theo ngày, vai trò, và trạng thái.
+Trả về thống kê người dùng với dữ liệu thô (role, is_active, created_at). Hỗ trợ lọc theo ngày, vai trò, và trạng thái.
 - Tổng số (total) dùng để tính phần trăm trên FE.`,
   })
   @ApiQuery({ name: 'startDate', required: false, type: String, description: 'Ngày bắt đầu (YYYY-MM-DD)' })
@@ -98,7 +95,7 @@ Trả về thống kê người dùng theo vai trò, trạng thái hoạt độn
   @ApiOperation({
     summary: 'Thống kê câu hỏi',
     description: `
-Trả về thống kê câu hỏi theo trạng thái, danh mục, và tư vấn viên. Hỗ trợ lọc theo ngày, danh mục, và ID tư vấn viên.
+Trả về thống kê câu hỏi với dữ liệu thô (status, category, consultant_id, created_at). Hỗ trợ lọc theo ngày, danh mục, và ID tư vấn viên.
 - Tổng số (total) hỗ trợ tính phần trăm trên FE.`,
   })
   @ApiQuery({ name: 'startDate', required: false, type: String, description: 'Ngày bắt đầu (YYYY-MM-DD)' })
@@ -113,14 +110,13 @@ Trả về thống kê câu hỏi theo trạng thái, danh mục, và tư vấn 
   @ApiOperation({
     summary: 'Thống kê doanh thu',
     description: `
-Trả về thống kê doanh thu theo dịch vụ, thời gian, và phương thức thanh toán. Hỗ trợ lọc theo ngày, ID dịch vụ, và phương thức.
+Trả về thống kê doanh thu với dữ liệu thô (amount, created_at, appointment_id). Hỗ trợ lọc theo ngày, ID dịch vụ, và phương thức.
 - Tổng số (total) là tổng doanh thu, dùng để tính phần trăm trên FE.`,
   })
   @ApiQuery({ name: 'startDate', required: false, type: String, description: 'Ngày bắt đầu (YYYY-MM-DD)' })
   @ApiQuery({ name: 'endDate', required: false, type: String, description: 'Ngày kết thúc (YYYY-MM-DD)' })
   @ApiQuery({ name: 'serviceId', required: false, type: String, description: 'ID dịch vụ' })
   @ApiQuery({ name: 'paymentMethod', required: false, type: String, description: 'Phương thức thanh toán' })
-  @ApiQuery({ name: 'groupBy', required: false, enum: ['day', 'month', 'quarter', 'year'], description: 'Nhóm theo ngày/tháng/quý/năm' })
   async getRevenueStats(@Query() query: StatsQueryDto) {
     return this.statsService.getRevenueStats(query);
   }
@@ -129,14 +125,13 @@ Trả về thống kê doanh thu theo dịch vụ, thời gian, và phương th�
   @ApiOperation({
     summary: 'Thống kê khách hàng sử dụng dịch vụ',
     description: `
-Trả về thống kê số lượng khách hàng duy nhất sử dụng dịch vụ theo danh mục, dịch vụ, và thời gian. Hỗ trợ lọc theo ngày, danh mục, và ID dịch vụ.
+Trả về thống kê khách hàng với dữ liệu thô (user_id, service_id, created_at). Hỗ trợ lọc theo ngày, danh mục, và ID dịch vụ.
 - Tổng số (total) là số khách hàng duy nhất, dùng để tính phần trăm trên FE.`,
   })
   @ApiQuery({ name: 'startDate', required: false, type: String, description: 'Ngày bắt đầu (YYYY-MM-DD)' })
   @ApiQuery({ name: 'endDate', required: false, type: String, description: 'Ngày kết thúc (YYYY-MM-DD)' })
   @ApiQuery({ name: 'serviceId', required: false, type: String, description: 'ID dịch vụ' })
   @ApiQuery({ name: 'category', required: false, type: String, description: 'Danh mục dịch vụ' })
-  @ApiQuery({ name: 'groupBy', required: false, enum: ['day', 'month', 'quarter', 'year'], description: 'Nhóm theo ngày/tháng/quý/năm' })
   async getCustomerServiceUsage(@Query() query: StatsQueryDto) {
     return this.statsService.getCustomerServiceUsage(query);
   }

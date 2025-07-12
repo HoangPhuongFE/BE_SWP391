@@ -18,10 +18,6 @@ export class StatsQueryDto {
   category?: string;
 
   @IsOptional()
-  @IsEnum(['day', 'month', 'quarter', 'year'])
-  groupBy?: 'day' | 'month' | 'quarter' | 'year';
-
-  @IsOptional()
   @IsString()
   status?: string;
 

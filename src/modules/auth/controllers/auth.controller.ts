@@ -47,6 +47,10 @@ export class AuthController {
   }
   @Get('google/redirect')
   @ApiOperation({ summary: 'Google OAuth callback endpoint' })
+  @ApiResponse({ status: 200, description: 'Đăng nhập thành công và chuyển hướng đến frontend' })
+  @ApiResponse({ status: 400, description: 'Email không được cung cấp bởi Google' })
+  @ApiResponse({ status: 401, description: 'Không có quyền truy cập' })
+  @ApiResponse({ status: 500, description: 'Lỗi máy chủ' })
   @UseGuards(AuthGuard('google'))
   async googleRedirect(@Req() req: Request, @Res() res: Response) {
     const oauthUser = req.user as {
@@ -113,6 +117,7 @@ export class AuthController {
   @ApiBody({ type: SignupDto })
   @ApiResponse({ status: 201, description: 'Người dùng đã được tạo thành công' })
   @ApiResponse({ status: 400, description: 'Mã OTP không hợp lệ hoặc email đã tồn tại' })
+  
   async signup(@Body() dto: SignupDto) {
     const user = await this.authService.registerWithOtp(
       dto.email,
@@ -129,6 +134,11 @@ export class AuthController {
   @ApiBearerAuth('access-token')
   @ApiBody({ type: ChangePasswordDto })
   @ApiResponse({ status: 200, description: 'Mật khẩu đã được thay đổi thành công' })
+  @ApiResponse({ status: 400, description: 'Mật khẩu hiện tại không đúng hoặc mật khẩu mới không hợp lệ' })
+  @ApiResponse({ status: 401, description: 'Không có quyền truy cập' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy người dùng với ID này' })
+  @ApiResponse({ status: 500, description: 'Lỗi máy chủ' })
+  @ApiResponse({ status: 403, description: 'Không có quyền truy cập' })
   @UseGuards(AuthGuard('jwt'))
   async changePassword(
     @Req() req,
@@ -144,6 +154,10 @@ export class AuthController {
   @ApiOperation({ summary: 'Đăng xuất và xóa refresh token' })
   @ApiBearerAuth('access-token')
   @ApiResponse({ status: 200, description: 'Đăng xuất thành công' })
+  @ApiResponse({ status: 401, description: 'Không có quyền truy cập' })
+  @ApiResponse({ status: 500, description: 'Lỗi máy chủ' })
+  @ApiResponse({ status: 400, description: 'Yêu cầu không hợp lệ' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy người dùng với ID này' })
   @UseGuards(AuthGuard('jwt'))
   async checkout(@Req() req: Request) {
     const userId = (req.user as any).sub;
@@ -156,6 +170,10 @@ export class AuthController {
   @ApiBearerAuth('access-token')
   @ApiBody({ type: ChangeRoleDto })
   @ApiResponse({ status: 200, description: 'Vai trò đã được thay đổi thành công' })
+  @ApiResponse({ status: 400, description: 'ID người dùng hoặc vai trò không hợp lệ' })
+  @ApiResponse({ status: 403, description: 'Không có quyền thay đổi vai trò' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy người dùng với ID này' })
+  @ApiResponse({ status: 500, description: 'Lỗi máy chủ' })
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(Role.Manager, Role.Admin)
   async changeRole(@Req() req: Request & { user?: JwtPayload }, @Body() dto: ChangeRoleDto) {
@@ -185,6 +203,9 @@ export class AuthController {
   @ApiBody({ type: ForgotPasswordSendOtpDto })
   @ApiResponse({ status: 200, description: 'Đã gửi OTP' })
   @ApiResponse({ status: 400, description: 'Email không tồn tại' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy người dùng với email này' })
+  @ApiResponse({ status: 500, description: 'Lỗi máy chủ' })
+  
   async sendForgotPasswordOtp(@Body() dto: ForgotPasswordSendOtpDto) {
     const exists = await this.authService.isEmailTaken(dto.email);
     if (!exists) throw new BadRequestException('Email chưa được đăng ký');
@@ -197,6 +218,8 @@ export class AuthController {
   @ApiBody({ type: ResetPasswordWithOtpDto })
   @ApiResponse({ status: 200, description: 'Đã đổi mật khẩu' })
   @ApiResponse({ status: 400, description: 'OTP sai hoặc email không hợp lệ' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy người dùng với email này' })
+  @ApiResponse({ status: 500, description: 'Lỗi máy chủ' })
   async resetPassword(@Body() dto: ResetPasswordWithOtpDto) {
     await this.authService.resetPasswordWithOtp(dto.email, dto.otpCode, dto.newPassword);
     return { message: 'Mật khẩu đã được đặt lại thành công' };
@@ -206,6 +229,10 @@ export class AuthController {
   @Get('users')
   @ApiOperation({ summary: 'Lấy danh sách toàn bộ người dùng (với hồ sơ nếu có)' })
   @ApiBearerAuth('access-token')
+  @ApiResponse({ status: 200, description: 'Danh sách người dùng' })
+  @ApiResponse({ status: 403, description: 'Không có quyền truy cập' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy người dùng' })
+  @ApiResponse({ status: 500, description: 'Lỗi máy chủ' })
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(Role.Manager, Role.Admin)
   async getAllUsers() {
@@ -219,6 +246,8 @@ export class AuthController {
   @ApiResponse({ status: 200, description: 'Người dùng đã được xóa thành công' })
   @ApiResponse({ status: 403, description: 'Không có quyền xóa' })
   @ApiResponse({ status: 404, description: 'Người dùng không tồn tại' })
+  @ApiResponse({ status: 400, description: 'ID người dùng không hợp lệ' })
+  @ApiResponse({ status: 500, description: 'Lỗi máy chủ' })
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(Role.Manager, Role.Admin)
   async deleteUser(@Param('id') userId: string, @Req() req: Request & { user?: JwtPayload }) {

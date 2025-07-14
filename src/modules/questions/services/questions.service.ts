@@ -64,7 +64,7 @@ export class QuestionsService {
         throw new BadRequestException('Lỗi khi upload hình ảnh');
       }
     } else if (image && !image.buffer) {
-      this.logger.warn('Image provided but not a valid file, skipping upload');
+      this.logger.warn('Hình ảnh không hợp lệ hoặc không có buffer');
     }
 
     // Tạo câu hỏi với is_anonymous mặc định là true
@@ -221,7 +221,7 @@ export class QuestionsService {
       where: { user_id: userId },
     });
     if (!consultant) {
-      this.logger.warn(`No consultant profile found for userId: ${userId}`);
+      this.logger.warn(`Không tìm thấy hồ sơ tư vấn viên cho userId: ${userId}`);
       throw new NotFoundException('Tư vấn viên không tìm thấy');
     }
 
@@ -234,7 +234,7 @@ export class QuestionsService {
     });
 
     if (questions.length === 0) {
-      this.logger.warn(`No assigned questions found for consultant_id: ${consultant.consultant_id}`);
+      this.logger.warn(`Không tìm thấy câu hỏi nào được gán cho consultant_id: ${consultant.consultant_id}`);
       throw new NotFoundException('Không có câu hỏi nào được gán');
     }
 

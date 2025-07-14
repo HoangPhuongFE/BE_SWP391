@@ -170,24 +170,7 @@ export class CycleService {
     });
   }
 
-  // async getCycles(userId: string, query: { startDate?: string; endDate?: string; limit?: number; page?: number }) {
-  //   const { startDate, endDate, limit = 10, page = 1 } = query;
-  //   const where: any = { user_id: userId, deleted_at: null };
-
-  //   if (startDate) where.start_date = { gte: new Date(startDate) };
-  //   if (endDate) where.start_date = { ...where.start_date, lte: new Date(endDate) };
-
-  //   const cycles = await this.prisma.menstrualCycle.findMany({
-  //     where,
-  //     orderBy: { start_date: 'desc' },
-  //     take: limit,
-  //     skip: (page - 1) * limit,
-  //   });
-
-  //   const total = await this.prisma.menstrualCycle.count({ where });
-
-  //   return { cycles, total, page, limit };
-  // }
+ 
   async getCycles(
     userId: string,
     query: { startDate?: string; endDate?: string; limit?: number; page?: number }

@@ -29,7 +29,7 @@ export class ProfileController {
   @Get('me')
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(Role.Customer, Role.Consultant, Role.Manager, Role.Staff, Role.Admin)
-  @ApiOperation({ summary: 'Lấy thông tin của chính bạn' })
+  @ApiOperation({ summary: 'Lấy thông tin của chính bạn (vai trò Customer, Consultant, Manager, Staff, Admin)' })
   @ApiBearerAuth('access-token')
   @ApiResponse({ status: 200, description: 'Thông tin người dùng' })
   async getCustomerProfile(@Req() req) {
@@ -46,7 +46,7 @@ export class ProfileController {
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(Role.Customer, Role.Consultant, Role.Manager, Role.Staff, Role.Admin)
   @UseInterceptors(FileInterceptor('image'))
-  @ApiOperation({ summary: 'Cập nhật thông tin của chính bạn' })
+  @ApiOperation({ summary: 'Cập nhật thông tin của chính bạn (vai trò Customer, Consultant, Manager, Staff, Admin)' })
   @ApiBearerAuth('access-token')
   @ApiConsumes('multipart/form-data')
   @ApiBody({ type: UpdateCustomerProfileDto })
@@ -64,7 +64,7 @@ export class ProfileController {
   @Get('consultant')
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(Role.Consultant)
-  @ApiOperation({ summary: 'Lấy ConsultantProfile của chính bạn' })
+  @ApiOperation({ summary: 'Lấy Thông tin Tư vấn viên của chính bạn' })
   @ApiBearerAuth('access-token')
   @ApiResponse({ status: 200, description: 'ConsultantProfile' })
   async getConsultantProfile(@Req() req) {

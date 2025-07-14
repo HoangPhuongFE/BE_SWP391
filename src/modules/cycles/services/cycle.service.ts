@@ -74,7 +74,7 @@ export class CycleService {
       message: 'Thiết lập chu kỳ thành công',
     };
   }
-  async createCycle(userId: string, dto: CreateCycleDto) {
+ async createCycle(userId: string, dto: CreateCycleDto) {
     const { startDate, periodLength, symptoms, notes } = dto;
     const start = new Date(startDate);
     const now = new Date();
@@ -91,34 +91,40 @@ export class CycleService {
 
     // Kiểm tra cách kỳ trước tối thiểu 20 ngày
     const lastCycle = await this.prisma.menstrualCycle.findFirst({
-
       where: { user_id: userId, deleted_at: null },
       orderBy: { start_date: 'desc' },
     });
     if (lastCycle) {
-      const daysBetween = (start.getTime() - lastCycle.start_date.getTime()) / (1000 * 60 * 60 * 24);
+      const daysBetween = Math.floor((start.getTime() - lastCycle.start_date.getTime()) / (1000 * 60 * 60 * 24));
       if (daysBetween < 20) {
         throw new BadRequestException('Chu kỳ mới phải cách chu kỳ trước đó ít nhất 20 ngày');
       }
     }
 
     // Tính độ dài chu kỳ
-    let cycleLength = 28;
-    if (lastCycle) {
-      cycleLength =
-        (start.getTime() - lastCycle.start_date.getTime()) / (1000 * 60 * 60 * 24);
-    }
+    let cycleLength = lastCycle
+      ? Math.floor((start.getTime() - lastCycle.start_date.getTime()) / (1000 * 60 * 60 * 24))
+      : 28;
 
-    // Tính độ dài trung bình
+    // Tính độ dài trung bình chu kỳ
     const cycles = await this.prisma.menstrualCycle.findMany({
       where: { user_id: userId, deleted_at: null },
       orderBy: { start_date: 'desc' },
       take: 3,
     });
-    const averageCycleLength =
-      cycles.length >= 3
-        ? cycles.reduce((sum, c) => sum + (c.cycle_length || 28), 0) / cycles.length
-        : 28;
+    let averageCycleLength: number;
+    let isDefaultUsed = false;
+
+    if (cycles.length === 0) {
+      averageCycleLength = 28; // Không có chu kỳ trước
+      isDefaultUsed = true;
+    } else if (cycles.length === 1) {
+      averageCycleLength = cycleLength; // Dùng cycleLength của chu kỳ trước
+    } else {
+      averageCycleLength = Math.floor(
+        cycles.reduce((sum, c) => sum + (c.cycle_length || cycleLength), 0) / cycles.length
+      );
+    }
 
     // Dự đoán chu kỳ và rụng trứng
     const nextCycleStart = new Date(start.getTime() + averageCycleLength * 24 * 60 * 60 * 1000);
@@ -143,9 +149,13 @@ export class CycleService {
     return {
       cycle,
       predictions: { nextCycleStart, ovulationDate },
-      message: 'Cập nhật chu kỳ thành công',
+      averageCycleLength,
+      isDefaultUsed,
+      message: isDefaultUsed
+        ? 'Cập nhật chu kỳ thành công, dự đoán dựa trên giá trị mặc định'
+        : 'Cập nhật chu kỳ thành công',
     };
-  }
+}
   async updateSymptoms(userId: string, cycleId: string, dto: UpdateSymptomsDto) {
     const cycle = await this.prisma.menstrualCycle.findUnique({
       where: { cycle_id: cycleId, user_id: userId, deleted_at: null },

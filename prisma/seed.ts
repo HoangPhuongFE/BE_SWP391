@@ -8,7 +8,7 @@ const consultantEmails = Array.from({ length: 8 }, (_, i) => `consultant${i + 1}
 const customerEmails = [
   'customer1@gmail.com', 'zonduyen25@gmail.com', 'hoangnpse161446@fpt.edu.vn',
   'hoang093898xxx@gmail.com', 'hoamgnguyen8@gmail.com', 'anhphi@gmail.com',
-  'thaikhoa@gmail.com', 'quanghuy@gmail.com', 'phuonghoang@gmail.com',
+  'thaikhoa0109@gmail.com', 'quanghuy@gmail.com', 'phuonghoang@gmail.com',
   'trangnguyen@gmail.com', 'minhvu@gmail.com', 'lananh@gmail.com'
 ];
 

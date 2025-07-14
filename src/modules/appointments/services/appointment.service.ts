@@ -195,7 +195,7 @@ export class AppointmentService {
 
 
 
-  async createStiAppointment(dto: CreateStiAppointmentDto & { userId: string }) {
+   async createStiAppointment(dto: CreateStiAppointmentDto & { userId: string }) {
     const {
       serviceId,
       date,
@@ -212,27 +212,55 @@ export class AppointmentService {
       ward,
     } = dto;
 
-    // Kiểm tra ngày
+    // Kiểm tra định dạng ngày
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(date)) {
+      throw new BadRequestException('Định dạng ngày phải là YYYY-MM-DD');
+    }
+
+    // Kiểm tra ngày trong tương lai
     const appointmentDate = new Date(date);
-    if (isNaN(appointmentDate.getTime())) throw new BadRequestException('Ngày không hợp lệ');
-    if (appointmentDate < new Date()) throw new BadRequestException('Ngày phải trong tương lai');
+    if (isNaN(appointmentDate.getTime())) {
+      throw new BadRequestException('Ngày không hợp lệ');
+    }
+    if (appointmentDate < new Date()) {
+      throw new BadRequestException('Ngày phải trong tương lai');
+    }
+
+    // Kiểm tra giới hạn lịch hẹn mỗi ngày
+    const userAppointments = await this.prisma.appointment.count({
+      where: {
+        user_id: userId,
+        start_time: { gte: new Date(appointmentDate.setHours(0, 0, 0, 0)), lte: new Date(appointmentDate.setHours(23, 59, 59, 999)) },
+        status: { not: 'Cancelled' },
+        deleted_at: null,
+      },
+    });
+    if (userAppointments > 0) {
+      throw new BadRequestException('Bạn chỉ có thể đặt 1 lịch xét nghiệm mỗi ngày');
+    }
 
     // Kiểm tra dịch vụ
     const svc = await this.prisma.service.findUnique({
       where: { service_id: serviceId, deleted_at: null },
     });
-    if (!svc || svc.type !== ServiceType.Testing) throw new BadRequestException('Dịch vụ không hợp lệ');
-    if (!svc.testing_hours || !svc.daily_capacity) throw new BadRequestException('Dịch vụ chưa được cấu hình');
+    if (!svc || svc.type !== ServiceType.Testing || !svc.testing_hours || !svc.daily_capacity) {
+      throw new BadRequestException('Dịch vụ không hợp lệ hoặc chưa được cấu hình');
+    }
 
     // Kiểm tra mode
     const modes = (svc.available_modes as ServiceMode[]) ?? [];
-    if (!modes.includes(selected_mode)) throw new BadRequestException('Dịch vụ không hỗ trợ hình thức đã chọn');
+    if (!modes.includes(selected_mode)) {
+      throw new BadRequestException('Dịch vụ không hỗ trợ hình thức đã chọn');
+    }
 
     // Kiểm tra buổi
     const testingHours = svc.testing_hours as Record<string, { start: string; end: string }>;
-    if (!testingHours[session]) throw new BadRequestException(`Buổi ${session} không hỗ trợ`);
+    if (!testingHours[session]) {
+      throw new BadRequestException(`Buổi ${session} không hỗ trợ`);
+    }
 
-    // Kiểm tra dung lượng
+    // Kiểm tra dung lượng ngày và buổi
     const startOfDay = new Date(date);
     startOfDay.setHours(0, 0, 0, 0);
     const endOfDay = new Date(date);
@@ -244,12 +272,42 @@ export class AppointmentService {
         status: { not: 'Cancelled' },
       },
     });
-    if (existingAppointments >= svc.daily_capacity) throw new BadRequestException('Dung lượng đã đầy');
+    if (existingAppointments >= svc.daily_capacity) {
+      throw new BadRequestException('Dung lượng ngày đã đầy');
+    }
+
+    const sessionCapacity = Math.floor(svc.daily_capacity / Object.keys(testingHours).length);
+    const sessionAppointments = await this.prisma.appointment.count({
+      where: {
+        service_id: serviceId,
+        start_time: { gte: startOfDay, lte: endOfDay },
+        status: { not: 'Cancelled' },
+        AND: [{ start_time: { gte: new Date(startOfDay.setHours(parseInt(testingHours[session].start.split(':')[0]))) } }],
+      },
+    });
+    if (sessionAppointments >= sessionCapacity) {
+      throw new BadRequestException(`Buổi ${session} đã đầy`);
+    }
+
+    // Kiểm tra thông tin giao hàng nếu AT_HOME
+    if (selected_mode === ServiceMode.AT_HOME) {
+      if (!contact_phone || !contact_phone.match(/^\+84\d{9}$/)) {
+        throw new BadRequestException('Số điện thoại phải là +84 theo sau 9 chữ số');
+      }
+      if (!shipping_address || shipping_address.length < 10 || shipping_address.length > 200) {
+        throw new BadRequestException('Địa chỉ giao hàng phải từ 10 đến 200 ký tự');
+      }
+      if (!province || !district || !ward || province.length > 50 || district.length > 50 || ward.length > 50) {
+        throw new BadRequestException('Tỉnh, quận, phường phải hợp lệ và dưới 50 ký tự');
+      }
+    }
 
     // Tính giờ bắt đầu - kết thúc
     const sessionHours = testingHours[session];
     const startHour = parseInt(sessionHours.start.split(':')[0]);
     const startMinute = parseInt(sessionHours.start.split(':')[1]);
+    const sessionEndHour = parseInt(sessionHours.end.split(':')[0]);
+    const sessionEndMinute = parseInt(sessionHours.end.split(':')[1]);
     const slotDuration = 30;
     const slotsUsed = existingAppointments % Math.floor(svc.daily_capacity / 2);
     const slotStartMinutes = startMinute + slotsUsed * slotDuration;
@@ -258,7 +316,14 @@ export class AppointmentService {
     const endTime = new Date(startTime);
     endTime.setMinutes(startTime.getMinutes() + slotDuration);
 
-    // Tạo appointment trước
+    // Kiểm tra thời gian trong khung giờ buổi
+    const sessionEndTime = new Date(appointmentDate);
+    sessionEndTime.setHours(sessionEndHour, sessionEndMinute, 0, 0);
+    if (endTime > sessionEndTime) {
+      throw new BadRequestException('Thời gian hẹn vượt quá khung giờ của buổi');
+    }
+
+    // Tạo appointment
     const appt = await this.prisma.appointment.create({
       data: {
         user_id: userId,
@@ -286,7 +351,7 @@ export class AppointmentService {
     }
     if (!orderCode) throw new BadRequestException('Tạo mã thanh toán thất bại');
 
-    // Tạo payment trước
+    // Tạo payment
     const payment = await this.prisma.payment.create({
       data: {
         appointment_id: appt.appointment_id,
@@ -295,11 +360,11 @@ export class AppointmentService {
         payment_method: PaymentMethod.BankCard,
         status: PaymentTransactionStatus.Pending,
         order_code: orderCode,
-        expires_at: new Date(Date.now() + 30 * 60 * 1000), // 30 phút
+        expires_at: new Date(Date.now() + 30 * 60 * 1000),
       },
     });
 
-    // Gọi PayOS để tạo payment link
+    // Tạo payment link
     const payDto: CreatePaymentDto = {
       orderCode,
       amount: Number(svc.price),
@@ -310,15 +375,10 @@ export class AppointmentService {
       paymentMethod: PaymentMethod.BankCard,
       appointmentId: appt.appointment_id,
     };
-
-    let paymentLink: string;
-    try {
-      const result = await this.paymentService.createPaymentLink(userId, payDto);
-      paymentLink = result.paymentLink;
-    } catch (error) {
+    const { paymentLink } = await this.paymentService.createPaymentLink(userId, payDto).catch((error) => {
       this.logger.error('Tạo liên kết thanh toán thất bại:', error);
       throw new BadRequestException('Tạo liên kết thanh toán thất bại');
-    }
+    });
 
     // Transaction: Tạo test result và shipping info
     const [testResult] = await this.prisma.$transaction(async (tx) => {

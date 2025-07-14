@@ -1048,110 +1048,116 @@ export class AppointmentService {
     };
   }
 
-  async getResults(body: GetResultsDto, userId: string) {
-    const { testCode, fullName } = body;
+  async getResults(body: GetResultsDto) {
+  const { testCode, fullName } = body;
 
-    const user = await this.prisma.user.findUnique({ where: { user_id: userId }, select: { full_name: true } });
-    if (!user || user.full_name !== fullName) {
-      throw new ForbiddenException('Tên không khớp với thông tin người dùng');
-    }
-
-    const testResult = await this.prisma.testResult.findUnique({
-      where: { test_code: testCode },
-      include: {
-        appointment: {
-          include: {
-            service: { select: { service_id: true, name: true, category: true } },
-            consultant: { include: { user: { select: { full_name: true } } } },
-            shipping_info: true,
-            payments: { select: { amount: true, payment_method: true, status: true, created_at: true } },
-            user: { select: { full_name: true, email: true, phone_number: true } },
-          },
+  // Find test result by testCode
+  const testResult = await this.prisma.testResult.findUnique({
+    where: { test_code: testCode },
+    include: {
+      appointment: {
+        include: {
+          service: { select: { service_id: true, name: true, category: true } },
+          consultant: { include: { user: { select: { full_name: true } } } },
+          shipping_info: true,
+          payments: { select: { amount: true, payment_method: true, status: true, created_at: true } },
+          user: { select: { full_name: true, email: true, phone_number: true } },
         },
       },
-    });
+    },
+  });
 
-    if (!testResult) {
-      throw new NotFoundException('Mã xét nghiệm không tồn tại');
-    }
-    if (testResult.appointment.user_id !== userId) {
-      throw new ForbiddenException('Bạn không có quyền xem kết quả này');
-    }
-
-    const appointmentStatusHistory = await this.prisma.appointmentStatusHistory.findMany({
-      where: { appointment_id: testResult.appointment.appointment_id },
-      orderBy: { changed_at: 'asc' },
-      select: { status: true, notes: true, changed_at: true, changed_by_user: { select: { full_name: true } } },
-    });
-
-    let testResultData: {
-      result_id: string;
-      test_code: string;
-      result_data: string;
-      status: typeof TestResultStatus[keyof typeof TestResultStatus];
-      is_abnormal: boolean;
-      notes: string | null;
-      updated_at: Date;
-      viewed_at: Date | null;
-    } | null = {
-      result_id: testResult.result_id,
-      test_code: testResult.test_code,
-      result_data: testResult.status === TestResultStatus.Completed ? testResult.result_data : 'Pending',
-      status: testResult.status,
-      is_abnormal: testResult.is_abnormal,
-      notes: testResult.notes,
-      updated_at: testResult.updated_at,
-      viewed_at: testResult.viewed_at,
-    };
-    const testResultStatusHistory = await this.prisma.testResultStatusHistory.findMany({
-      where: { result_id: testResult.result_id },
-      orderBy: { changed_at: 'asc' },
-      select: { status: true, notes: true, changed_at: true, changed_by_user: { select: { full_name: true } } },
-    });
-
-    if (testResult.status === TestResultStatus.Completed && !testResult.viewed_at) {
-      await this.prisma.testResult.update({
-        where: { result_id: testResult.result_id },
-        data: { viewed_at: new Date() },
-      });
-    }
-
-    await this.prisma.auditLog.create({
-      data: {
-        user_id: userId,
-        action: 'VIEW_TEST_RESULT',
-        entity_type: 'TestResult',
-        entity_id: testResult.result_id,
-        details: { testCode },
-      },
-    });
-
-    return {
-      appointment: {
-        appointment_id: testResult.appointment.appointment_id,
-        type: testResult.appointment.type,
-        start_time: testResult.appointment.start_time,
-        end_time: testResult.appointment.end_time,
-        status: testResult.appointment.status,
-        payment_status: testResult.appointment.payment_status,
-        location: testResult.appointment.location,
-        mode: testResult.appointment.mode,
-        service: testResult.appointment.service,
-        consultant_name: testResult.appointment.consultant?.user?.full_name || null,
-        shipping_info: testResult.appointment.mode === ServiceMode.AT_HOME ? testResult.appointment.shipping_info : null,
-        payments: testResult.appointment.payments,
-      },
-      testResult: testResultData,
-      appointmentStatusHistory,
-      testResultStatusHistory,
-      basic_info: {
-        full_name: testResult.appointment.user.full_name,
-        email: testResult.appointment.user.email,
-        phone_number: testResult.appointment.user.phone_number,
-      },
-      message: testResultData.status === TestResultStatus.Completed
-        ? 'Lấy kết quả xét nghiệm và thông tin lịch hẹn thành công'
-        : 'Kết quả xét nghiệm chưa sẵn sàng',
-    };
+  // Check if test result exists
+  if (!testResult) {
+    throw new NotFoundException('Mã xét nghiệm không tồn tại');
   }
+
+  // Verify fullName matches the user associated with the appointment
+  if (testResult.appointment.user.full_name !== fullName) {
+    throw new ForbiddenException('Tên không khớp với thông tin người dùng');
+  }
+
+  // Fetch appointment status history
+  const appointmentStatusHistory = await this.prisma.appointmentStatusHistory.findMany({
+    where: { appointment_id: testResult.appointment.appointment_id },
+    orderBy: { changed_at: 'asc' },
+    select: { status: true, notes: true, changed_at: true, changed_by_user: { select: { full_name: true } } },
+  });
+
+  // Prepare test result data
+  let testResultData: {
+    result_id: string;
+    test_code: string;
+    result_data: string;
+    status: typeof TestResultStatus[keyof typeof TestResultStatus];
+    is_abnormal: boolean;
+    notes: string | null;
+    updated_at: Date;
+    viewed_at: Date | null;
+  } | null = {
+    result_id: testResult.result_id,
+    test_code: testResult.test_code,
+    result_data: testResult.status === TestResultStatus.Completed ? testResult.result_data : 'Pending',
+    status: testResult.status,
+    is_abnormal: testResult.is_abnormal,
+    notes: testResult.notes,
+    updated_at: testResult.updated_at,
+    viewed_at: testResult.viewed_at,
+  };
+
+  // Fetch test result status history
+  const testResultStatusHistory = await this.prisma.testResultStatusHistory.findMany({
+    where: { result_id: testResult.result_id },
+    orderBy: { changed_at: 'asc' },
+    select: { status: true, notes: true, changed_at: true, changed_by_user: { select: { full_name: true } } },
+  });
+
+  // Update viewed_at if result is completed and not yet viewed
+  if (testResult.status === TestResultStatus.Completed && !testResult.viewed_at) {
+    await this.prisma.testResult.update({
+      where: { result_id: testResult.result_id },
+      data: { viewed_at: new Date() },
+    });
+  }
+
+  // Log the view action (use appointment's user_id for audit log)
+  await this.prisma.auditLog.create({
+    data: {
+      user_id: testResult.appointment.user_id,
+      action: 'VIEW_TEST_RESULT',
+      entity_type: 'TestResult',
+      entity_id: testResult.result_id,
+      details: { testCode },
+    },
+  });
+
+  // Return response
+  return {
+    appointment: {
+      appointment_id: testResult.appointment.appointment_id,
+      type: testResult.appointment.type,
+      start_time: testResult.appointment.start_time,
+      end_time: testResult.appointment.end_time,
+      status: testResult.appointment.status,
+      payment_status: testResult.appointment.payment_status,
+      location: testResult.appointment.location,
+      mode: testResult.appointment.mode,
+      service: testResult.appointment.service,
+      consultant_name: testResult.appointment.consultant?.user?.full_name || null,
+      shipping_info: testResult.appointment.mode === ServiceMode.AT_HOME ? testResult.appointment.shipping_info : null,
+      payments: testResult.appointment.payments,
+    },
+    testResult: testResultData,
+    appointmentStatusHistory,
+    testResultStatusHistory,
+    basic_info: {
+      full_name: testResult.appointment.user.full_name,
+      email: testResult.appointment.user.email,
+      phone_number: testResult.appointment.user.phone_number,
+    },
+    message: testResultData.status === TestResultStatus.Completed
+      ? 'Lấy kết quả xét nghiệm và thông tin lịch hẹn thành công'
+      : 'Kết quả xét nghiệm chưa sẵn sàng',
+  };
+}
 }

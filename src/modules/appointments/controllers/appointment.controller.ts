@@ -267,17 +267,16 @@ Trả về thông tin chi tiết lịch hẹn bao gồm lịch sử trạng thá
 
   @Post('results')
   @ApiOperation({
-    summary: 'Xem kết quả xét nghiệm bằng mã xét nghiệm với xác nhận tên',
+    summary: 'Xem kết quả xét nghiệm bằng mã xét nghiệm và tên',
     description: `
-Cho phép khách hàng nhập mã xét nghiệm (test_code) cùng với tên đầy đủ để xác nhận quyền sở hữu và xem kết quả xét nghiệm.  
+Cho phép khách hàng nhập mã xét nghiệm (test_code) và tên đầy đủ để xem kết quả xét nghiệm.  
 - Hệ thống kiểm tra tên khớp với thông tin người dùng và trạng thái kết quả (đã hoàn tất hoặc chưa).`,
   })
   @ApiBody({
     type: GetResultsDto,
     description: 'Dữ liệu đầu vào gồm mã xét nghiệm và tên đầy đủ',
   })
-  async getResults(@Body() body: GetResultsDto, @Req() req) {
-    const userId = (req.user as any).userId;
-    return this.appointmentService.getResults(body, userId);
+  async getResults(@Body() body: GetResultsDto) {
+    return this.appointmentService.getResults(body);
   }
 }

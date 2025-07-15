@@ -2,7 +2,7 @@ import { Injectable, BadRequestException, Logger, ForbiddenException } from '@ne
 import { PrismaService } from '../../../prisma/prisma.service';
 import { CreateScheduleDto } from '../dtos/create-schedule.dto';
 import { UpdateScheduleDto } from '../dtos/update-schedule.dto';
-import { AppointmentStatus, NotificationStatus, NotificationType, Role, ServiceType } from '@prisma/client';
+import { AppointmentStatus, NotificationStatus, NotificationType, Role, Service, ServiceType } from '@prisma/client';
 import { BatchCreateScheduleDto } from '../dtos/batch-create-schedule.dto';
 
 @Injectable()
@@ -65,7 +65,7 @@ export class ScheduleService {
         deleted_at: null,
       },
     });
-    const maxSchedulesPerDay = 5; 
+    const maxSchedulesPerDay = 5;
     if (dailySchedules >= maxSchedulesPerDay) {
       throw new BadRequestException(`Vượt quá giới hạn ${maxSchedulesPerDay} lịch trống mỗi ngày`);
     }
@@ -153,36 +153,71 @@ export class ScheduleService {
       throw new BadRequestException('Lịch không tồn tại');
     }
 
+    // Kiểm tra lịch đã được đặt
+    if (schedule.is_booked) {
+      throw new BadRequestException('Lịch đã được đặt, không thể cập nhật');
+    }
+
+    const now = new Date();
     const start = dto.start_time ? new Date(dto.start_time) : schedule.start_time;
     const end = dto.end_time ? new Date(dto.end_time) : schedule.end_time;
+    const maxDate = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000); // 2 tháng
 
+    // Kiểm tra thời gian
     if ((dto.start_time || dto.end_time) && (isNaN(start.getTime()) || isNaN(end.getTime()))) {
       throw new BadRequestException('Định dạng thời gian không hợp lệ');
     }
-
     if (dto.start_time || dto.end_time) {
+      if (start <= now) {
+        throw new BadRequestException('Thời gian bắt đầu phải trong tương lai');
+      }
       if (start >= end) {
         throw new BadRequestException('Thời gian kết thúc phải sau thời gian bắt đầu');
       }
-
+      if (start.getFullYear() > now.getFullYear() || start > maxDate) {
+        throw new BadRequestException('Lịch phải trong vòng 2 tháng và không trước năm sau');
+      }
       const durationHours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
       if (durationHours > 2) {
         throw new BadRequestException('Lịch không được dài quá 2 giờ');
       }
+    }
 
+    // Kiểm tra Consultant
+    const consultant = await this.prisma.consultantProfile.findUnique({
+      where: { consultant_id: schedule.consultant_id },
+    });
+    if (!consultant || !consultant.is_verified) {
+      throw new BadRequestException('Consultant không tồn tại hoặc chưa được xác minh');
+    }
+
+    // Kiểm tra dịch vụ
+    let service: Service | null = null;
+    if (dto.service_id) {
+      service = await this.prisma.service.findUnique({
+        where: { service_id: dto.service_id, deleted_at: null },
+      });
+      if (!service || service.type !== ServiceType.Consultation) {
+        throw new BadRequestException('Dịch vụ không tồn tại hoặc không phải tư vấn');
+      }
+    }
+
+    // Kiểm tra trùng lịch hẹn
+    if (dto.start_time || dto.end_time) {
       const overlappingAppointment = await this.prisma.appointment.findFirst({
         where: {
           consultant_id: schedule.consultant_id,
           start_time: { lte: end },
           end_time: { gte: start },
-          status: { not: 'Cancelled' },
-          appointment_id: { not: scheduleId },
+          status: { not: AppointmentStatus.Cancelled },
+          deleted_at: null,
         },
       });
       if (overlappingAppointment) {
         throw new BadRequestException('Thời gian trùng với lịch hẹn khác');
       }
 
+      // Kiểm tra trùng lịch trống
       const overlappingSchedule = await this.prisma.schedule.findFirst({
         where: {
           consultant_id: schedule.consultant_id,
@@ -197,16 +232,28 @@ export class ScheduleService {
       }
     }
 
-    if (dto.service_id) {
-      const service = await this.prisma.service.findUnique({
-        where: { service_id: dto.service_id, deleted_at: null },
+    // Kiểm tra giới hạn lịch trống mỗi ngày
+    if (dto.start_time) {
+      const startOfDay = new Date(start);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(start);
+      endOfDay.setHours(23, 59, 59, 999);
+      const dailySchedules = await this.prisma.schedule.count({
+        where: {
+          consultant_id: schedule.consultant_id,
+          start_time: { gte: startOfDay, lte: endOfDay },
+          deleted_at: null,
+          schedule_id: { not: scheduleId },
+        },
       });
-      if (!service || service.type !== ServiceType.Consultation) {
-        throw new BadRequestException('Dịch vụ không tồn tại hoặc không phải tư vấn');
+      const maxSchedulesPerDay = 5; // Hoặc lấy từ schedule.max_appointments_per_day
+      if (dailySchedules >= maxSchedulesPerDay) {
+        throw new BadRequestException('Vượt quá giới hạn 5 lịch trống mỗi ngày');
       }
     }
 
-    return this.prisma.schedule.update({
+    // Cập nhật lịch
+    const updatedSchedule = await this.prisma.schedule.update({
       where: { schedule_id: scheduleId },
       data: {
         start_time: dto.start_time ? new Date(dto.start_time) : undefined,
@@ -214,6 +261,33 @@ export class ScheduleService {
         service_id: dto.service_id,
       },
     });
+
+    // Gửi thông báo
+    if (consultant) {
+      const currentService = service || (await this.prisma.service.findUnique({
+        where: { service_id: updatedSchedule.service_id },
+      }));
+      await this.prisma.notification.create({
+        data: {
+          user_id: consultant.user_id,
+          type: NotificationType.Email,
+          title: 'Cập nhật lịch trống thành công',
+          content: `Lịch trống ${scheduleId} đã được cập nhật cho dịch vụ ${currentService?.name || 'không đổi'} từ ${start.toISOString()} đến ${end.toISOString()}.`,
+          status: NotificationStatus.Pending,
+        },
+      });
+    }
+
+    // Lấy tên dịch vụ hiện tại nếu không cập nhật service_id
+    const serviceName = service ? service.name : (await this.prisma.service.findUnique({
+      where: { service_id: updatedSchedule.service_id },
+    }))?.name;
+
+    return {
+      schedule: updatedSchedule,
+      serviceName: serviceName || 'Không xác định',
+      message: 'Cập nhật lịch trống thành công',
+    };
   }
 
   async deleteSchedule(scheduleId: string, userId: string, userRole: Role) {
@@ -319,16 +393,15 @@ export class ScheduleService {
     this.logger.log(`Schedule ${scheduleId} deleted by user ${userId} with role ${userRole}`);
     return { message: 'Xóa lịch thành công' };
   }
-
   async getConsultantProfile(userId: string) {
-    return this.prisma.consultantProfile.findUnique({
+    return this.prisma.consultantProfile.findFirst({
       where: { user_id: userId },
     });
   }
 
   async getScheduleWithConsultant(scheduleId: string) {
     return this.prisma.schedule.findUnique({
-      where: { schedule_id: scheduleId },
+      where: { schedule_id: scheduleId, deleted_at: null },
       include: { consultant: true },
     });
   }

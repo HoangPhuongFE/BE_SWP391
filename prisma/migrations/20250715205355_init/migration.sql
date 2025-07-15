@@ -16,6 +16,7 @@ CREATE TABLE `User` (
 
     UNIQUE INDEX `User_email_key`(`email`),
     INDEX `User_email_idx`(`email`),
+    INDEX `User_role_is_active_created_at_idx`(`role`, `is_active`, `created_at`),
     PRIMARY KEY (`user_id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -85,6 +86,7 @@ CREATE TABLE `MenstrualCycle` (
     `deleted_at` DATETIME(3) NULL,
 
     INDEX `MenstrualCycle_user_id_start_date_idx`(`user_id`, `start_date`),
+    INDEX `MenstrualCycle_start_date_idx`(`start_date`),
     PRIMARY KEY (`cycle_id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -118,7 +120,7 @@ CREATE TABLE `Appointment` (
     `type` ENUM('Consultation', 'Testing') NOT NULL,
     `start_time` DATETIME(3) NOT NULL,
     `end_time` DATETIME(3) NOT NULL,
-    `status` ENUM('Pending', 'Confirmed', 'SampleCollected', 'Completed', 'Cancelled') NOT NULL DEFAULT 'Pending',
+    `status` ENUM('Pending', 'Confirmed', 'InProgress', 'SampleCollected', 'Completed', 'Cancelled') NOT NULL DEFAULT 'Pending',
     `location` VARCHAR(255) NULL,
     `payment_status` ENUM('Pending', 'Paid', 'Failed') NOT NULL DEFAULT 'Pending',
     `is_free_consultation` BOOLEAN NOT NULL DEFAULT false,
@@ -135,7 +137,10 @@ CREATE TABLE `Appointment` (
     `mode` ENUM('AT_HOME', 'AT_CLINIC') NULL,
 
     UNIQUE INDEX `Appointment_schedule_id_key`(`schedule_id`),
-    INDEX `Appointment_mode_idx`(`mode`),
+    INDEX `Appointment_status_created_at_idx`(`status`, `created_at`),
+    INDEX `Appointment_service_id_user_id_idx`(`service_id`, `user_id`),
+    INDEX `Appointment_consultant_id_idx`(`consultant_id`),
+    INDEX `Appointment_user_id_service_id_start_time_end_time_idx`(`user_id`, `service_id`, `start_time`, `end_time`),
     PRIMARY KEY (`appointment_id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -187,7 +192,7 @@ CREATE TABLE `ReturnShippingInfo` (
 CREATE TABLE `AppointmentStatusHistory` (
     `history_id` CHAR(36) NOT NULL,
     `appointment_id` CHAR(36) NOT NULL,
-    `status` ENUM('Pending', 'Confirmed', 'SampleCollected', 'Completed', 'Cancelled') NOT NULL,
+    `status` ENUM('Pending', 'Confirmed', 'InProgress', 'SampleCollected', 'Completed', 'Cancelled') NOT NULL,
     `notes` VARCHAR(255) NULL,
     `changed_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `changed_by` CHAR(36) NOT NULL,
@@ -216,6 +221,7 @@ CREATE TABLE `TestResult` (
     UNIQUE INDEX `TestResult_appointment_id_key`(`appointment_id`),
     INDEX `TestResult_status_idx`(`status`),
     INDEX `TestResult_viewed_at_idx`(`viewed_at`),
+    INDEX `TestResult_status_created_at_idx`(`status`, `created_at`),
     PRIMARY KEY (`result_id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -251,6 +257,7 @@ CREATE TABLE `Question` (
     `deleted_at` DATETIME(3) NULL,
 
     INDEX `Question_user_id_status_consultant_id_idx`(`user_id`, `status`, `consultant_id`),
+    INDEX `Question_status_category_consultant_id_idx`(`status`, `category`, `consultant_id`),
     PRIMARY KEY (`question_id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -273,6 +280,7 @@ CREATE TABLE `Feedback` (
 
     INDEX `Feedback_user_id_status_idx`(`user_id`, `status`),
     INDEX `Feedback_consultant_id_status_idx`(`consultant_id`, `status`),
+    INDEX `Feedback_status_created_at_idx`(`status`, `created_at`),
     PRIMARY KEY (`feedback_id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -375,6 +383,7 @@ CREATE TABLE `Payment` (
     UNIQUE INDEX `Payment_order_code_key`(`order_code`),
     INDEX `Payment_appointment_id_status_idx`(`appointment_id`, `status`),
     INDEX `Payment_user_id_status_idx`(`user_id`, `status`),
+    INDEX `Payment_status_created_at_payment_method_idx`(`status`, `created_at`, `payment_method`),
     PRIMARY KEY (`payment_id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -390,6 +399,7 @@ CREATE TABLE `Schedule` (
     `deleted_at` DATETIME(3) NULL,
     `max_appointments_per_day` INTEGER NULL DEFAULT 5,
 
+    INDEX `Schedule_consultant_id_start_time_end_time_idx`(`consultant_id`, `start_time`, `end_time`),
     INDEX `Schedule_consultant_id_start_time_idx`(`consultant_id`, `start_time`),
     INDEX `Schedule_service_id_idx`(`service_id`),
     PRIMARY KEY (`schedule_id`)
@@ -470,6 +480,9 @@ ALTER TABLE `Feedback` ADD CONSTRAINT `Feedback_consultant_id_fkey` FOREIGN KEY 
 
 -- AddForeignKey
 ALTER TABLE `Feedback` ADD CONSTRAINT `Feedback_service_id_fkey` FOREIGN KEY (`service_id`) REFERENCES `Service`(`service_id`) ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `Feedback` ADD CONSTRAINT `Feedback_appointment_id_fkey` FOREIGN KEY (`appointment_id`) REFERENCES `Appointment`(`appointment_id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `BlogPost` ADD CONSTRAINT `BlogPost_author_id_fkey` FOREIGN KEY (`author_id`) REFERENCES `User`(`user_id`) ON DELETE RESTRICT ON UPDATE CASCADE;

@@ -17,7 +17,6 @@ import {
   ApiBearerAuth,
   ApiBody,
   ApiParam,
-  ApiPropertyOptional,
 } from '@nestjs/swagger';
 import { AppointmentService } from '../services/appointment.service';
 import { CreateAppointmentDto } from '../dtos/create-appointment.dto';
@@ -34,8 +33,9 @@ import { CompleteConsultationDto } from '../dtos/complete-consultation.dto';
 @ApiTags('Appointments')
 @Controller('appointments')
 export class AppointmentController {
-  constructor(private readonly appointmentService: AppointmentService) { }
+  constructor(private readonly appointmentService: AppointmentService) {}
 
+  // API cho Customer
   @Post()
   @Roles(Role.Customer)
   @UseGuards(AuthGuard('jwt'))
@@ -92,6 +92,129 @@ Body gồm:
     return this.appointmentService.createStiAppointment({ ...dto, userId });
   }
 
+  @Get('my-appointments')
+  @Roles(Role.Customer)
+  @UseGuards(AuthGuard('jwt'))
+  @ApiOperation({
+    summary: 'Xem lịch hẹn của tôi',
+    description: `
+Trả về toàn bộ lịch hẹn của người dùng bao gồm thông tin dịch vụ, Consultant, trạng thái, kết quả, và thanh toán.`
+  })
+  @ApiBearerAuth('access-token')
+  async getMyAppointments(@Req() req) {
+    const userId = (req.user as any).userId;
+    if (!userId) throw new BadRequestException('Không tìm thấy userId trong token');
+    return this.appointmentService.getUserAppointments(userId);
+  }
+
+  @Get('validate-test-code/:testCode')
+  @Roles(Role.Customer)
+  @UseGuards(AuthGuard('jwt'))
+  @ApiOperation({
+    summary: 'Kiểm tra mã xét nghiệm cho tư vấn miễn phí',
+    description: `
+Kiểm tra xem mã xét nghiệm (test_code) có đủ điều kiện để đặt lịch tư vấn miễn phí hay không.  
+Điều kiện:  
+- Mã xét nghiệm thuộc lịch hẹn xét nghiệm (type = 'Testing').  
+- Lịch hẹn đã hoàn tất (status = 'Completed').  
+- Chưa từng sử dụng để đặt tư vấn miễn phí.  
+- Còn trong thời hạn miễn phí (thường 30 ngày kể từ khi hoàn tất).  
+
+Frontend nên gọi API này trước khi gửi yêu cầu tạo lịch hẹn với test_code.  
+Trả về:  
+- { valid: true, message: 'Bạn đủ điều kiện nhận tư vấn miễn phí' } nếu hợp lệ.  
+- { valid: false, message: ... } nếu không hợp lệ (mã không tồn tại, đã sử dụng, hoặc hết hạn).`
+  })
+  @ApiBearerAuth('access-token')
+  @ApiParam({ name: 'testCode', description: 'Mã xét nghiệm từ kết quả xét nghiệm (ví dụ: STI-12345)', type: String })
+  async validateTestCode(@Param('testCode') testCode: string, @Req() req) {
+    const userId = (req.user as any).userId;
+    return this.appointmentService.validateTestCode(testCode, userId);
+  }
+
+  @Patch(':appointmentId/feedback')
+  @Roles(Role.Customer)
+  @UseGuards(AuthGuard('jwt'))
+  @ApiOperation({
+    summary: 'Gửi đánh giá tư vấn',
+    description: `
+Khách hàng gửi đánh giá sau khi hoàn tất lịch hẹn tư vấn. Hệ thống cập nhật điểm trung bình của tư vấn viên.`
+  })
+  @ApiBearerAuth('access-token')
+  @ApiParam({ name: 'appointmentId', description: 'ID lịch tư vấn', type: String })
+  @ApiBody({ type: CreateFeedbackDto })
+  async submitFeedback(
+    @Param('appointmentId') appointmentId: string,
+    @Body() dto: CreateFeedbackDto,
+    @Req() req,
+  ) {
+    const userId = (req.user as any).userId;
+    return this.appointmentService.submitFeedback(appointmentId, dto, userId);
+  }
+
+  @Post('results')
+  @ApiOperation({
+    summary: 'Xem kết quả xét nghiệm bằng mã xét nghiệm và tên',
+    description: `
+Cho phép khách hàng nhập mã xét nghiệm (test_code) và tên đầy đủ để xem kết quả xét nghiệm.  
+- Hệ thống kiểm tra tên khớp với thông tin người dùng và trạng thái kết quả (đã hoàn tất hoặc chưa).`
+  })
+  @ApiBody({
+    type: GetResultsDto,
+    description: 'Dữ liệu đầu vào gồm mã xét nghiệm và tên đầy đủ',
+  })
+  async getResults(@Body() body: GetResultsDto) {
+    return this.appointmentService.getResults(body);
+  }
+
+  // API cho Consultant
+  @Get('consultant-appointments')
+  @Roles(Role.Consultant)
+  @UseGuards(AuthGuard('jwt'))
+  @ApiOperation({
+    summary: 'Xem danh sách lịch hẹn của Consultant',
+    description: 'Trả về danh sách các lịch hẹn được phân công cho Consultant hiện tại, bao gồm thông tin khách hàng, dịch vụ, và trạng thái.'
+  })
+  @ApiBearerAuth('access-token')
+  async getConsultantAppointments(@Req() req) {
+    const userId = (req.user as any).userId;
+    return this.appointmentService.getConsultantAppointments(userId);
+  }
+
+  @Post(':appointmentId/start')
+  @Roles(Role.Consultant)
+  @UseGuards(AuthGuard('jwt'))
+  @ApiOperation({
+    summary: 'Consultant xác nhận buổi tư vấn bắt đầu',
+    description: 'Consultant xác nhận buổi tư vấn đã bắt đầu, chuyển trạng thái sang InProgress (đang diễn ra). Trả về lịch hẹn đã cập nhật.'
+  })
+  @ApiBearerAuth('access-token')
+  @ApiParam({ name: 'appointmentId', description: 'ID lịch hẹn' })
+  async startConsultation(@Param('appointmentId') appointmentId: string, @Req() req) {
+    const userId = req.user.userId;
+    return this.appointmentService.startConsultation(appointmentId, userId);
+  }
+
+  @Post(':appointmentId/complete')
+  @Roles(Role.Consultant)
+  @UseGuards(AuthGuard('jwt'))
+  @ApiOperation({
+    summary: 'Consultant xác nhận buổi tư vấn hoàn tất',
+    description: 'Consultant xác nhận buổi tư vấn hoàn tất, chuyển trạng thái sang Completed, có thể thêm ghi chú. Gửi email thông báo cho khách hàng. Trả về lịch hẹn đã cập nhật, tên dịch vụ và tư vấn viên.'
+  })
+  @ApiBearerAuth('access-token')
+  @ApiParam({ name: 'appointmentId', description: 'ID lịch hẹn' })
+  @ApiBody({ type: CompleteConsultationDto })
+  async completeConsultation(
+    @Param('appointmentId') appointmentId: string,
+    @Body() dto: CompleteConsultationDto,
+    @Req() req,
+  ) {
+    const userId = req.user.userId;
+    return this.appointmentService.completeConsultation(appointmentId, dto, userId);
+  }
+
+  // API cho Staff/Manager
   @Get()
   @Roles(Role.Staff, Role.Manager)
   @UseGuards(AuthGuard('jwt'))
@@ -103,6 +226,39 @@ Trả về danh sách lịch hẹn chưa hủy dành cho Staff hoặc Manager. B
   @ApiBearerAuth('access-token')
   async getAllAppointments() {
     return this.appointmentService.getAllAppointments();
+  }
+
+  @Get('pending')
+  @Roles(Role.Staff, Role.Manager)
+  @UseGuards(AuthGuard('jwt'))
+  @ApiOperation({
+    summary: 'Xem lịch hẹn chờ xác nhận GIÀNH CHO Staff, Manager',
+    description: `
+Trả về danh sách lịch hẹn đang ở trạng thái Pending dành cho Staff, Manager xác nhận.`
+  })
+  @ApiBearerAuth('access-token')
+  async getPendingAppointments() {
+    return this.appointmentService.getPendingAppointments();
+  }
+
+  @Patch(':appointmentId/confirm')
+  @Roles(Role.Staff, Role.Manager)
+  @UseGuards(AuthGuard('jwt'))
+  @ApiOperation({
+    summary: 'Xác nhận lịch hẹn',
+    description: `
+Xác nhận lịch hẹn từ Pending sang Confirmed. Hệ thống kiểm tra trạng thái thanh toán và lịch trống.`
+  })
+  @ApiBearerAuth('access-token')
+  @ApiParam({ name: 'appointmentId', description: 'ID lịch hẹn', type: String })
+  @ApiBody({ type: ConfirmAppointmentDto })
+  async confirmAppointment(
+    @Param('appointmentId') appointmentId: string,
+    @Body() dto: ConfirmAppointmentDto,
+    @Req() req,
+  ) {
+    const staffId = req.user.userId;
+    return this.appointmentService.confirmAppointment(appointmentId, dto, staffId);
   }
 
   @Patch(':appointmentId/status')
@@ -157,101 +313,7 @@ Xóa mềm lịch hẹn. Nếu có lịch trống liên quan sẽ mở lại đ�
     return this.appointmentService.deleteAppointment(appointmentId);
   }
 
-  @Patch(':appointmentId/confirm')
-  @Roles(Role.Staff, Role.Manager)
-  @UseGuards(AuthGuard('jwt'))
-  @ApiOperation({
-    summary: 'Xác nhận lịch hẹn',
-    description: `
-Xác nhận lịch hẹn từ Pending sang Confirmed. Hệ thống kiểm tra trạng thái thanh toán và lịch trống.`
-  })
-  @ApiBearerAuth('access-token')
-  @ApiParam({ name: 'appointmentId', description: 'ID lịch hẹn', type: String })
-  @ApiBody({ type: ConfirmAppointmentDto })
-  async confirmAppointment(
-    @Param('appointmentId') appointmentId: string,
-    @Body() dto: ConfirmAppointmentDto,
-    @Req() req,
-  ) {
-    const staffId = req.user.userId;
-    return this.appointmentService.confirmAppointment(appointmentId, dto, staffId);
-  }
-
-  @Patch(':appointmentId/feedback')
-  @Roles(Role.Customer)
-  @UseGuards(AuthGuard('jwt'))
-  @ApiOperation({
-    summary: 'Gửi đánh giá tư vấn',
-    description: `
-Khách hàng gửi đánh giá sau khi hoàn tất lịch hẹn tư vấn. Hệ thống cập nhật điểm trung bình của tư vấn viên.`
-  })
-  @ApiBearerAuth('access-token')
-  @ApiParam({ name: 'appointmentId', description: 'ID lịch tư vấn', type: String })
-  @ApiBody({ type: CreateFeedbackDto })
-  async submitFeedback(
-    @Param('appointmentId') appointmentId: string,
-    @Body() dto: CreateFeedbackDto,
-    @Req() req,
-  ) {
-    const userId = (req.user as any).userId;
-    return this.appointmentService.submitFeedback(appointmentId, dto, userId);
-  }
-
-
-  @Get('validate-test-code/:testCode')
-  @Roles(Role.Customer)
-  @UseGuards(AuthGuard('jwt'))
-  @ApiOperation({
-    summary: 'Kiểm tra mã xét nghiệm cho tư vấn miễn phí',
-    description: `
-Kiểm tra xem mã xét nghiệm (test_code) có đủ điều kiện để đặt lịch tư vấn miễn phí hay không.  
-Điều kiện:  
-- Mã xét nghiệm thuộc lịch hẹn xét nghiệm (type = 'Testing').  
-- Lịch hẹn đã hoàn tất (status = 'Completed').  
-- Chưa từng sử dụng để đặt tư vấn miễn phí.  
-- Còn trong thời hạn miễn phí (thường 30 ngày kể từ khi hoàn tất).  
-
-Frontend nên gọi API này trước khi gửi yêu cầu tạo lịch hẹn với test_code.  
-Trả về:  
-- { valid: true, message: 'Bạn đủ điều kiện nhận tư vấn miễn phí' } nếu hợp lệ.  
-- { valid: false, message: ... } nếu không hợp lệ (mã không tồn tại, đã sử dụng, hoặc hết hạn).
-    `,
-  })
-  @ApiBearerAuth('access-token')
-  @ApiParam({ name: 'testCode', description: 'Mã xét nghiệm từ kết quả xét nghiệm (ví dụ: STI-12345)', type: String })
-  async validateTestCode(@Param('testCode') testCode: string, @Req() req) {
-    const userId = (req.user as any).userId;
-    return this.appointmentService.validateTestCode(testCode, userId);
-  }
-
-  @Get('my-appointments')
-  @Roles(Role.Customer)
-  @UseGuards(AuthGuard('jwt'))
-  @ApiOperation({
-    summary: 'Xem lịch hẹn của tôi',
-    description: `
-Trả về toàn bộ lịch hẹn của người dùng bao gồm thông tin dịch vụ, Consultant, trạng thái, kết quả, và thanh toán.`
-  })
-  @ApiBearerAuth('access-token')
-  async getMyAppointments(@Req() req) {
-    const userId = (req.user as any).userId;
-    if (!userId) throw new BadRequestException('Không tìm thấy userId trong token');
-    return this.appointmentService.getUserAppointments(userId);
-  }
-
-  @Get('pending')
-  @Roles(Role.Staff, Role.Manager)
-  @UseGuards(AuthGuard('jwt'))
-  @ApiOperation({
-    summary: 'Xem lịch hẹn chờ xác nhận GIÀNH CHO Staff, Manager',
-    description: `
-Trả về danh sách lịch hẹn đang ở trạng thái Pending dành cho Staff, Manager xác nhận.`
-  })
-  @ApiBearerAuth('access-token')
-  async getPendingAppointments() {
-    return this.appointmentService.getPendingAppointments();
-  }
-
+  // API chung
   @Get(':appointmentId')
   @UseGuards(AuthGuard('jwt'))
   @ApiOperation({
@@ -266,67 +328,4 @@ Trả về thông tin chi tiết lịch hẹn bao gồm lịch sử trạng thá
     const role = (req.user as any).role;
     return this.appointmentService.getAppointmentById(appointmentId, userId, role);
   }
-
-  @Post('results')
-  @ApiOperation({
-    summary: 'Xem kết quả xét nghiệm bằng mã xét nghiệm và tên',
-    description: `
-Cho phép khách hàng nhập mã xét nghiệm (test_code) và tên đầy đủ để xem kết quả xét nghiệm.  
-- Hệ thống kiểm tra tên khớp với thông tin người dùng và trạng thái kết quả (đã hoàn tất hoặc chưa).`,
-  })
-  @ApiBody({
-    type: GetResultsDto,
-    description: 'Dữ liệu đầu vào gồm mã xét nghiệm và tên đầy đủ',
-  })
-  async getResults(@Body() body: GetResultsDto) {
-    return this.appointmentService.getResults(body);
-  }
-
-
-  @Post(':appointmentId/start')
-  @Roles(Role.Consultant)
-  @UseGuards(AuthGuard('jwt'))
-  @ApiOperation({
-    summary: 'Consultant xác nhận buổi tư vấn bắt đầu',
-    description: 'Consultant xác nhận buổi tư vấn đã bắt đầu, chuyển trạng thái sang InProgress (đang diễn ra). Trả về lịch hẹn đã cập nhật.',
-  })
-  @ApiBearerAuth('access-token')
-  @ApiParam({ name: 'appointmentId', description: 'ID lịch hẹn' })
-  async startConsultation(@Param('appointmentId') appointmentId: string, @Req() req) {
-    const userId = req.user.userId;
-    return this.appointmentService.startConsultation(appointmentId, userId);
-  }
-
-  @Post(':appointmentId/complete')
-  @Roles(Role.Consultant)
-  @UseGuards(AuthGuard('jwt'))
-  @ApiOperation({
-    summary: 'Consultant xác nhận buổi tư vấn hoàn tất',
-    description: 'Consultant xác nhận buổi tư vấn hoàn tất, chuyển trạng thái sang Completed, có thể thêm ghi chú. Gửi email thông báo cho khách hàng. Trả về lịch hẹn đã cập nhật, tên dịch vụ và tư vấn viên.',
-  })
-  @ApiBearerAuth('access-token')
-  @ApiParam({ name: 'appointmentId', description: 'ID lịch hẹn' })
-  @ApiBody({ type: CompleteConsultationDto })
-  async completeConsultation(
-    @Param('appointmentId') appointmentId: string,
-    @Body() dto: CompleteConsultationDto,
-    @Req() req,
-  ) {
-    const userId = req.user.userId;
-    return this.appointmentService.completeConsultation(appointmentId, dto, userId);
-  }
-
-
-  @Get('consultant-appointments')
-  @Roles(Role.Consultant)
-  @UseGuards(AuthGuard('jwt'))
-  @ApiOperation({
-    summary: 'Xem danh sách lịch hẹn của Consultant',
-    description: 'Trả về danh sách các lịch hẹn được phân công cho Consultant hiện tại, bao gồm thông tin khách hàng, dịch vụ, và trạng thái.'
-  })
-  @ApiBearerAuth('access-token')
-  async getConsultantAppointments(@Req() req) {
-    const userId = (req.user as any).userId;
-    return this.appointmentService.getConsultantAppointments(userId);
-  }
-} 
+}

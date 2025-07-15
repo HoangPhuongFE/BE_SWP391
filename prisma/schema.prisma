@@ -32,6 +32,7 @@ enum AppointmentType {
 enum AppointmentStatus {
   Pending
   Confirmed
+  InProgress
   SampleCollected
   Completed
   Cancelled

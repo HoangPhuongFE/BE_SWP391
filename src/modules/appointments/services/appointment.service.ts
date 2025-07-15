@@ -11,6 +11,8 @@ import { GetResultsDto } from '../dtos/get-results.dto';
 import { AppointmentStatus, Role, PaymentMethod, TestResultStatus, ServiceType, FeedbackStatus, PaymentTransactionStatus, PaymentStatus, ShippingStatus, NotificationType, NotificationStatus } from '@prisma/client';
 import { ConfirmAppointmentDto } from '../dtos/confirm-appointment.dto';
 import { ServiceMode } from '@modules/services/dtos/create-service.dto';
+import { EmailService } from '@modules/email/email.service';
+import { CompleteConsultationDto } from '../dtos/complete-consultation.dto';
 
 @Injectable()
 export class AppointmentService {
@@ -20,6 +22,7 @@ export class AppointmentService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly paymentService: PaymentService,
+    private readonly emailService: EmailService,
   ) { }
 
   private generateTestCode(category: string): string {
@@ -32,6 +35,7 @@ export class AppointmentService {
     const validTransitions: Record<AppointmentStatus, AppointmentStatus[]> = {
       Pending: [AppointmentStatus.Confirmed, AppointmentStatus.Cancelled],
       Confirmed: [AppointmentStatus.SampleCollected, AppointmentStatus.Cancelled],
+      InProgress: [AppointmentStatus.SampleCollected, AppointmentStatus.Cancelled],
       SampleCollected: [AppointmentStatus.Completed, AppointmentStatus.Cancelled],
       Completed: [],
       Cancelled: [],
@@ -213,8 +217,8 @@ export class AppointmentService {
         orderCode,
         amount: paymentAmount,
         description: `Hẹn ${svc.name}`.substring(0, 25),
-        cancelUrl: 'https://your-frontend/.../cancel',
-        returnUrl: 'https://your-frontend/.../success',
+        cancelUrl: `${process.env.FRONTEND_URL}/cancel`,
+        returnUrl: `${process.env.FRONTEND_URL}/success`,
         buyerName: userId,
         paymentMethod: PaymentMethod.BankCard,
         appointmentId: appt.appointment_id,
@@ -1298,6 +1302,133 @@ export class AppointmentService {
       message: testResultData.status === TestResultStatus.Completed
         ? 'Lấy kết quả xét nghiệm và thông tin lịch hẹn thành công'
         : 'Kết quả xét nghiệm chưa sẵn sàng',
+    };
+  }
+
+
+  async startConsultation(appointmentId: string, userId: string) {
+    const appointment = await this.prisma.appointment.findUnique({
+      where: { appointment_id: appointmentId, deleted_at: null },
+      include: { consultant: true },
+    });
+    if (!appointment) {
+      throw new BadRequestException('Lịch hẹn không tồn tại');
+    }
+    if (appointment.type !== 'Consultation') {
+      throw new BadRequestException('Chỉ áp dụng cho lịch hẹn tư vấn');
+    }
+    if (appointment.status !== AppointmentStatus.Confirmed) {
+      throw new BadRequestException('Lịch hẹn phải ở trạng thái Confirmed');
+    }
+    const consultant = await this.prisma.consultantProfile.findUnique({
+      where: { user_id: userId },
+    });
+    if (!consultant || appointment.consultant_id !== consultant.consultant_id) {
+      throw new ForbiddenException('Bạn không có quyền xác nhận buổi tư vấn này');
+    }
+
+    const updatedAppointment = await this.prisma.$transaction([
+      this.prisma.appointment.update({
+        where: { appointment_id: appointmentId },
+        data: { status: AppointmentStatus.InProgress, updated_at: new Date() },
+      }),
+      this.prisma.appointmentStatusHistory.create({
+        data: {
+          appointment_id: appointmentId,
+          status: AppointmentStatus.InProgress,
+          notes: 'Buổi tư vấn đã bắt đầu',
+          changed_by: userId,
+        },
+      }),
+      this.prisma.notification.create({
+        data: {
+          user_id: appointment.user_id,
+          type: NotificationType.Email,
+          title: 'Buổi tư vấn đã bắt đầu',
+          content: `Buổi tư vấn của bạn với mã ${appointmentId} đã bắt đầu vào ${new Date().toISOString()}.`,
+          status: NotificationStatus.Pending,
+        },
+      }),
+    ]);
+
+    this.logger.log(`Buổi tư vấn ${appointmentId} được xác nhận bắt đầu bởi Consultant ${userId}`);
+    return { appointment: updatedAppointment[0], message: 'Xác nhận buổi tư vấn bắt đầu thành công' };
+  }
+
+
+  async completeConsultation(appointmentId: string, dto: CompleteConsultationDto, userId: string) {
+    const appointment = await this.prisma.appointment.findUnique({
+      where: { appointment_id: appointmentId, deleted_at: null },
+      include: {
+        consultant: { include: { user: { select: { full_name: true, email: true } } } },
+        user: { select: { email: true, full_name: true } },
+        service: { select: { name: true } },
+      },
+    });
+    if (!appointment) {
+      throw new BadRequestException('Lịch hẹn không tồn tại');
+    }
+    if (appointment.type !== 'Consultation') {
+      throw new BadRequestException('Chỉ áp dụng cho lịch hẹn tư vấn');
+    }
+    if (appointment.status !== AppointmentStatus.InProgress) {
+      throw new BadRequestException('Lịch hẹn phải ở trạng thái InProgress');
+    }
+    const consultant = await this.prisma.consultantProfile.findUnique({
+      where: { user_id: userId },
+    });
+    if (!consultant || appointment.consultant_id !== consultant.consultant_id) {
+      throw new ForbiddenException('Bạn không có quyền xác nhận hoàn tất buổi tư vấn này');
+    }
+
+    let notificationStatus: NotificationStatus = NotificationStatus.Pending;
+    try {
+      // Gửi email thông báo
+      await this.emailService.sendEmail(
+        appointment.user.email,
+        'Buổi tư vấn đã hoàn tất',
+        `Buổi tư vấn của bạn (mã ${appointmentId}) với tư vấn viên ${appointment.consultant?.user.full_name || 'Không xác định'} cho dịch vụ ${appointment.service?.name || 'Không xác định'} đã hoàn tất vào ${new Date().toISOString()}. Ghi chú: ${dto.consultation_notes || 'Không có ghi chú'}. Vui lòng vào web tư vấn viên  gửi feedback để giúp chúng tôi cải thiện dịch vụ.`,
+      );
+      notificationStatus = NotificationStatus.Sent;
+    } catch (error) {
+      this.logger.error(`Gửi email thất bại cho ${appointment.user.email}:`, error);
+      notificationStatus = NotificationStatus.Failed;
+    }
+
+    const updatedAppointment = await this.prisma.$transaction([
+      this.prisma.appointment.update({
+        where: { appointment_id: appointmentId },
+        data: {
+          status: AppointmentStatus.Completed,
+          consultation_notes: dto.consultation_notes,
+          updated_at: new Date(),
+        },
+      }),
+      this.prisma.appointmentStatusHistory.create({
+        data: {
+          appointment_id: appointmentId,
+          status: AppointmentStatus.Completed,
+          notes: dto.consultation_notes || 'Buổi tư vấn đã hoàn tất',
+          changed_by: userId,
+        },
+      }),
+      this.prisma.notification.create({
+        data: {
+          user_id: appointment.user_id,
+          type: NotificationType.Email,
+          title: 'Buổi tư vấn đã hoàn tất',
+          content: `Buổi tư vấn của bạn (mã ${appointmentId}) với tư vấn viên ${appointment.consultant?.user.full_name || 'Không xác định'} đã hoàn tất. Vui lòng gửi feedback để giúp chúng tôi cải thiện dịch vụ.`,
+          status: notificationStatus,
+        },
+      }),
+    ]);
+
+    this.logger.log(`Buổi tư vấn ${appointmentId} được xác nhận hoàn tất bởi Consultant ${userId}`);
+    return {
+      appointment: updatedAppointment[0],
+      serviceName: appointment.service?.name || 'Không xác định',
+      consultantName: appointment.consultant?.user.full_name || 'Không xác định',
+      message: 'Xác nhận buổi tư vấn hoàn tất thành công',
     };
   }
 }

@@ -17,6 +17,7 @@ import {
   ApiBearerAuth,
   ApiBody,
   ApiParam,
+  ApiPropertyOptional,
 } from '@nestjs/swagger';
 import { AppointmentService } from '../services/appointment.service';
 import { CreateAppointmentDto } from '../dtos/create-appointment.dto';
@@ -28,6 +29,7 @@ import { Role } from '@prisma/client';
 import { ConfirmAppointmentDto } from '../dtos/confirm-appointment.dto';
 import { CreateFeedbackDto } from '../dtos/create-feedback.dto';
 import { GetResultsDto } from '../dtos/get-results.dto';
+import { CompleteConsultationDto } from '../dtos/complete-consultation.dto';
 
 @ApiTags('Appointments')
 @Controller('appointments')
@@ -279,4 +281,38 @@ Cho phép khách hàng nhập mã xét nghiệm (test_code) và tên đầy đ�
   async getResults(@Body() body: GetResultsDto) {
     return this.appointmentService.getResults(body);
   }
-}
+
+
+  @Post(':appointmentId/start')
+  @Roles(Role.Consultant)
+  @UseGuards(AuthGuard('jwt'))
+  @ApiOperation({
+    summary: 'Consultant xác nhận buổi tư vấn bắt đầu',
+    description: 'Consultant xác nhận buổi tư vấn đã bắt đầu, chuyển trạng thái sang InProgress (đang diễn ra). Trả về lịch hẹn đã cập nhật.',
+  })
+  @ApiBearerAuth('access-token')
+  @ApiParam({ name: 'appointmentId', description: 'ID lịch hẹn' })
+  async startConsultation(@Param('appointmentId') appointmentId: string, @Req() req) {
+    const userId = req.user.userId;
+    return this.appointmentService.startConsultation(appointmentId, userId);
+  }
+
+  @Post(':appointmentId/complete')
+  @Roles(Role.Consultant)
+  @UseGuards(AuthGuard('jwt'))
+  @ApiOperation({
+    summary: 'Consultant xác nhận buổi tư vấn hoàn tất',
+    description: 'Consultant xác nhận buổi tư vấn hoàn tất, chuyển trạng thái sang Completed, có thể thêm ghi chú. Gửi email thông báo cho khách hàng. Trả về lịch hẹn đã cập nhật, tên dịch vụ và tư vấn viên.',
+  })
+  @ApiBearerAuth('access-token')
+  @ApiParam({ name: 'appointmentId', description: 'ID lịch hẹn' })
+  @ApiBody({ type: CompleteConsultationDto })
+  async completeConsultation(
+    @Param('appointmentId') appointmentId: string,
+    @Body() dto: CompleteConsultationDto,
+    @Req() req,
+  ) {
+    const userId = req.user.userId;
+    return this.appointmentService.completeConsultation(appointmentId, dto, userId);
+  }
+} 

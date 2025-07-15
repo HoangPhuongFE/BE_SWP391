@@ -286,7 +286,7 @@ model Appointment {
   @@index([status, created_at]) // Hỗ trợ lọc trạng thái và thời gian trong appointments/stats
   @@index([service_id, user_id]) // Hỗ trợ customers/service-usage và services/stats
   @@index([consultant_id]) // Tối ưu join với ConsultantProfile trong feedback/stats
-
+  @@index([user_id, service_id, start_time, end_time]) // Tối ưu kiểm tra trùng thời gian
 }
 
 model ShippingInfo {

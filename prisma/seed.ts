@@ -36,7 +36,7 @@ async function main() {
   }
 
   // System User (cố định)
-  const systemUserId = '550e8400-e29b-41d4-a716-446655440000'; // UUID cố định
+  const systemUserId = '550e8400-e29b-41d4-a716-446655440000'; 
   await prisma.user.upsert({
     where: { user_id: systemUserId },
     update: {},

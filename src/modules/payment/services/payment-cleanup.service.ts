@@ -6,7 +6,7 @@ import { Prisma, AppointmentStatus, PaymentStatus, PaymentTransactionStatus } fr
 @Injectable()
 export class PaymentCleanupService {
   private readonly logger = new Logger(PaymentCleanupService.name);
-  private readonly SYSTEM_USER_ID = '550e8400-e29b-41d4-a716-446655440000'; // UUID cố định từ seed
+  private readonly SYSTEM_USER_ID = '550e8400-e29b-41d4-a716-446655440000';
   constructor(private readonly prisma: PrismaService) {}
 
   @Cron(CronExpression.EVERY_30_MINUTES) // Chạy mỗi 30 phút

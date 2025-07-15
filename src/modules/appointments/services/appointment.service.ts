@@ -8,7 +8,7 @@ import { UpdateAppointmentStatusDto } from '../dtos/update-appointment-status.dt
 import { CreatePaymentDto } from '../../payment/dtos/create-payment.dto';
 import { CreateFeedbackDto } from '../dtos/create-feedback.dto';
 import { GetResultsDto } from '../dtos/get-results.dto';
-import { AppointmentStatus, Role, PaymentMethod, TestResultStatus, ServiceType, FeedbackStatus, PaymentTransactionStatus } from '@prisma/client';
+import { AppointmentStatus, Role, PaymentMethod, TestResultStatus, ServiceType, FeedbackStatus, PaymentTransactionStatus, PaymentStatus, ShippingStatus, NotificationType, NotificationStatus } from '@prisma/client';
 import { ConfirmAppointmentDto } from '../dtos/confirm-appointment.dto';
 import { ServiceMode } from '@modules/services/dtos/create-service.dto';
 
@@ -55,11 +55,21 @@ export class AppointmentService {
   async createAppointment(dto: CreateAppointmentDto & { userId: string }) {
     const { consultant_id, schedule_id, service_id, type, location, userId, test_code } = dto;
 
-    // Kiểm tra lịch trống
+    // Kiểm tra thời gian hợp lệ
+    const now = new Date();
     const schedule = await this.prisma.schedule.findUnique({
       where: { schedule_id, is_booked: false, deleted_at: null },
     });
     if (!schedule) throw new BadRequestException('Lịch trống không tồn tại hoặc đã được đặt');
+
+    // Kiểm tra năm và khoảng thời gian
+    const maxDate = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000); // 2 tháng
+    if (schedule.start_time.getFullYear() > now.getFullYear()) {
+      throw new BadRequestException('Không thể đặt lịch trước năm sau');
+    }
+    if (schedule.start_time < now || schedule.start_time > maxDate) {
+      throw new BadRequestException('Lịch hẹn phải trong vòng 2 tháng từ hiện tại và không sớm hơn hôm nay');
+    }
 
     // Kiểm tra dịch vụ
     const svc = await this.prisma.service.findUnique({
@@ -73,7 +83,7 @@ export class AppointmentService {
       if (!consultant || consultant.consultant_id !== schedule.consultant_id) throw new BadRequestException('Consultant không hợp lệ');
     }
 
-    // Kiểm tra trùng lịch
+    // Kiểm tra trùng lịch với consultant
     const overlap = await this.prisma.appointment.findFirst({
       where: {
         consultant_id: schedule.consultant_id,
@@ -83,6 +93,31 @@ export class AppointmentService {
       },
     });
     if (overlap) throw new BadRequestException('Thời gian trùng lịch hẹn khác');
+
+    // Kiểm tra trùng lịch của người dùng với cùng dịch vụ
+    const userOverlap = await this.prisma.appointment.findFirst({
+      where: {
+        user_id: userId,
+        service_id,
+        start_time: { lte: schedule.end_time },
+        end_time: { gte: schedule.start_time },
+        status: { not: 'Cancelled' },
+        deleted_at: null,
+      },
+    });
+    if (userOverlap) throw new BadRequestException('Bạn đã có lịch hẹn trùng thời gian cho dịch vụ này');
+
+    // Kiểm tra số lượng lịch hẹn chưa thanh toán
+    const pendingAppointments = await this.prisma.appointment.count({
+      where: {
+        user_id: userId,
+        service_id,
+        payment_status: PaymentStatus.Pending,
+        status: { not: 'Cancelled' },
+        deleted_at: null,
+      },
+    });
+    if (pendingAppointments >= 3) throw new BadRequestException('Bạn có quá nhiều lịch hẹn chưa thanh toán cho dịch vụ này');
 
     // Kiểm tra tư vấn miễn phí với test_code
     let isFreeConsultation = false;
@@ -195,7 +230,7 @@ export class AppointmentService {
 
 
 
-   async createStiAppointment(dto: CreateStiAppointmentDto & { userId: string }) {
+  async createStiAppointment(dto: CreateStiAppointmentDto & { userId: string }) {
     const {
       serviceId,
       date,
@@ -218,20 +253,41 @@ export class AppointmentService {
       throw new BadRequestException('Định dạng ngày phải là YYYY-MM-DD');
     }
 
-    // Kiểm tra ngày trong tương lai
+    // Kiểm tra ngày hợp lệ và giới hạn thời gian
+    const now = new Date();
     const appointmentDate = new Date(date);
     if (isNaN(appointmentDate.getTime())) {
       throw new BadRequestException('Ngày không hợp lệ');
     }
-    if (appointmentDate < new Date()) {
-      throw new BadRequestException('Ngày phải trong tương lai');
+    const maxDate = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000); // 2 tháng
+    if (appointmentDate.getFullYear() > now.getFullYear()) {
+      throw new BadRequestException('Không thể đặt lịch trước năm sau');
+    }
+    if (appointmentDate < now || appointmentDate > maxDate) {
+      throw new BadRequestException('Lịch hẹn phải trong vòng 2 tháng từ hiện tại và không sớm hơn hôm nay');
+    }
+
+    // Kiểm tra số lượng lịch hẹn chưa thanh toán
+    const pendingAppointments = await this.prisma.appointment.count({
+      where: {
+        user_id: userId,
+        service_id: serviceId,
+        payment_status: PaymentStatus.Pending,
+        status: { not: 'Cancelled' },
+        deleted_at: null,
+      },
+    });
+    if (pendingAppointments >= 3) {
+      throw new BadRequestException('Bạn có quá nhiều lịch hẹn chưa thanh toán cho dịch vụ này');
     }
 
     // Kiểm tra giới hạn lịch hẹn mỗi ngày
+    const startOfDay = new Date(appointmentDate.setHours(0, 0, 0, 0));
+    const endOfDay = new Date(appointmentDate.setHours(23, 59, 59, 999));
     const userAppointments = await this.prisma.appointment.count({
       where: {
         user_id: userId,
-        start_time: { gte: new Date(appointmentDate.setHours(0, 0, 0, 0)), lte: new Date(appointmentDate.setHours(23, 59, 59, 999)) },
+        start_time: { gte: startOfDay, lte: endOfDay },
         status: { not: 'Cancelled' },
         deleted_at: null,
       },
@@ -261,10 +317,6 @@ export class AppointmentService {
     }
 
     // Kiểm tra dung lượng ngày và buổi
-    const startOfDay = new Date(date);
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(date);
-    endOfDay.setHours(23, 59, 59, 999);
     const existingAppointments = await this.prisma.appointment.count({
       where: {
         service_id: serviceId,
@@ -277,16 +329,31 @@ export class AppointmentService {
     }
 
     const sessionCapacity = Math.floor(svc.daily_capacity / Object.keys(testingHours).length);
+    const sessionStartTime = new Date(startOfDay.setHours(parseInt(testingHours[session].start.split(':')[0])));
     const sessionAppointments = await this.prisma.appointment.count({
       where: {
         service_id: serviceId,
         start_time: { gte: startOfDay, lte: endOfDay },
         status: { not: 'Cancelled' },
-        AND: [{ start_time: { gte: new Date(startOfDay.setHours(parseInt(testingHours[session].start.split(':')[0]))) } }],
+        AND: [{ start_time: { gte: sessionStartTime } }],
       },
     });
     if (sessionAppointments >= sessionCapacity) {
       throw new BadRequestException(`Buổi ${session} đã đầy`);
+    }
+
+    // Kiểm tra trùng thời gian của người dùng với cùng dịch vụ
+    const userOverlap = await this.prisma.appointment.findFirst({
+      where: {
+        user_id: userId,
+        service_id: serviceId,
+        start_time: { gte: startOfDay, lte: endOfDay },
+        status: { not: 'Cancelled' },
+        deleted_at: null,
+      },
+    });
+    if (userOverlap) {
+      throw new BadRequestException('Bạn đã có lịch hẹn trong ngày này cho dịch vụ này');
     }
 
     // Kiểm tra thông tin giao hàng nếu AT_HOME
@@ -331,7 +398,7 @@ export class AppointmentService {
         start_time: startTime,
         end_time: endTime,
         status: 'Pending',
-        payment_status: 'Pending',
+        payment_status: PaymentStatus.Pending,
         location: selected_mode === ServiceMode.AT_CLINIC ? location : null,
         service_id: serviceId,
         mode: selected_mode,
@@ -387,7 +454,7 @@ export class AppointmentService {
           appointment_id: appt.appointment_id,
           service_id: serviceId,
           result_data: 'Pending',
-          status: 'Pending',
+          status: TestResultStatus.Pending,
           test_code: await this.generateUniqueTestCode(category),
         },
       });
@@ -397,7 +464,7 @@ export class AppointmentService {
           data: {
             appointment_id: appt.appointment_id,
             provider: 'GHN',
-            shipping_status: 'Pending',
+            shipping_status: ShippingStatus.Pending,
             contact_name: contact_name!,
             contact_phone: contact_phone!,
             shipping_address: shipping_address!,
@@ -415,7 +482,7 @@ export class AppointmentService {
     await this.prisma.appointmentStatusHistory.create({
       data: {
         appointment_id: appt.appointment_id,
-        status: 'Pending',
+        status: AppointmentStatus.Pending,
         notes: 'Tạo lịch hẹn xét nghiệm',
         changed_by: userId,
       },
@@ -424,19 +491,31 @@ export class AppointmentService {
     await this.prisma.testResultStatusHistory.create({
       data: {
         result_id: testResult.result_id,
-        status: 'Pending',
+        status: TestResultStatus.Pending,
         notes: 'Kết quả khởi tạo',
         changed_by: userId,
       },
     });
 
+    // Thông báo nhắc nhở thanh toán
     await this.prisma.notification.create({
       data: {
         user_id: userId,
-        type: 'Email',
+        type: NotificationType.Email,
         title: 'Đặt lịch xét nghiệm thành công',
-        content: `Lịch hẹn xét nghiệm của bạn đã được tạo. Mã xét nghiệm: ${testResult.test_code}. Vui lòng thanh toán để xác nhận.`,
-        status: 'Pending',
+        content: `Lịch hẹn xét nghiệm của bạn đã được tạo. Mã xét nghiệm: ${testResult.test_code}. Vui lòng thanh toán trong 30 phút để xác nhận. Xét nghiệm STI cần được thực hiện sớm để bảo vệ sức khỏe.`,
+        status: NotificationStatus.Pending,
+      },
+    });
+
+    // Thông báo hướng dẫn chuẩn bị xét nghiệm
+    await this.prisma.notification.create({
+      data: {
+        user_id: userId,
+        type: NotificationType.Email,
+        title: 'Hướng dẫn chuẩn bị xét nghiệm STI',
+        content: `Để đảm bảo kết quả xét nghiệm chính xác, vui lòng nhịn ăn 4-6 giờ trước khi lấy mẫu (nếu tại phòng khám) hoặc chuẩn bị mẫu theo hướng dẫn trong bộ xét nghiệm tại nhà.`,
+        status: NotificationStatus.Pending,
       },
     });
 
@@ -449,6 +528,7 @@ export class AppointmentService {
       message: 'Đặt lịch xét nghiệm thành công',
       return_address: svc.return_address,
       return_phone: svc.return_phone,
+      preparationGuide: 'Nhịn ăn 4-6 giờ trước khi lấy mẫu (tại phòng khám) hoặc làm theo hướng dẫn bộ xét nghiệm tại nhà.',
     };
   }
 
@@ -1109,115 +1189,115 @@ export class AppointmentService {
   }
 
   async getResults(body: GetResultsDto) {
-  const { testCode, fullName } = body;
+    const { testCode, fullName } = body;
 
-  // Find test result by testCode
-  const testResult = await this.prisma.testResult.findUnique({
-    where: { test_code: testCode },
-    include: {
-      appointment: {
-        include: {
-          service: { select: { service_id: true, name: true, category: true } },
-          consultant: { include: { user: { select: { full_name: true } } } },
-          shipping_info: true,
-          payments: { select: { amount: true, payment_method: true, status: true, created_at: true } },
-          user: { select: { full_name: true, email: true, phone_number: true } },
+    // Find test result by testCode
+    const testResult = await this.prisma.testResult.findUnique({
+      where: { test_code: testCode },
+      include: {
+        appointment: {
+          include: {
+            service: { select: { service_id: true, name: true, category: true } },
+            consultant: { include: { user: { select: { full_name: true } } } },
+            shipping_info: true,
+            payments: { select: { amount: true, payment_method: true, status: true, created_at: true } },
+            user: { select: { full_name: true, email: true, phone_number: true } },
+          },
         },
       },
-    },
-  });
-
-  // Check if test result exists
-  if (!testResult) {
-    throw new NotFoundException('Mã xét nghiệm không tồn tại');
-  }
-
-  // Verify fullName matches the user associated with the appointment
-  if (testResult.appointment.user.full_name !== fullName) {
-    throw new ForbiddenException('Tên không khớp với thông tin người dùng');
-  }
-
-  // Fetch appointment status history
-  const appointmentStatusHistory = await this.prisma.appointmentStatusHistory.findMany({
-    where: { appointment_id: testResult.appointment.appointment_id },
-    orderBy: { changed_at: 'asc' },
-    select: { status: true, notes: true, changed_at: true, changed_by_user: { select: { full_name: true } } },
-  });
-
-  // Prepare test result data
-  let testResultData: {
-    result_id: string;
-    test_code: string;
-    result_data: string;
-    status: typeof TestResultStatus[keyof typeof TestResultStatus];
-    is_abnormal: boolean;
-    notes: string | null;
-    updated_at: Date;
-    viewed_at: Date | null;
-  } | null = {
-    result_id: testResult.result_id,
-    test_code: testResult.test_code,
-    result_data: testResult.status === TestResultStatus.Completed ? testResult.result_data : 'Pending',
-    status: testResult.status,
-    is_abnormal: testResult.is_abnormal,
-    notes: testResult.notes,
-    updated_at: testResult.updated_at,
-    viewed_at: testResult.viewed_at,
-  };
-
-  // Fetch test result status history
-  const testResultStatusHistory = await this.prisma.testResultStatusHistory.findMany({
-    where: { result_id: testResult.result_id },
-    orderBy: { changed_at: 'asc' },
-    select: { status: true, notes: true, changed_at: true, changed_by_user: { select: { full_name: true } } },
-  });
-
-  // Update viewed_at if result is completed and not yet viewed
-  if (testResult.status === TestResultStatus.Completed && !testResult.viewed_at) {
-    await this.prisma.testResult.update({
-      where: { result_id: testResult.result_id },
-      data: { viewed_at: new Date() },
     });
+
+    // Check if test result exists
+    if (!testResult) {
+      throw new NotFoundException('Mã xét nghiệm không tồn tại');
+    }
+
+    // Verify fullName matches the user associated with the appointment
+    if (testResult.appointment.user.full_name !== fullName) {
+      throw new ForbiddenException('Tên không khớp với thông tin người dùng');
+    }
+
+    // Fetch appointment status history
+    const appointmentStatusHistory = await this.prisma.appointmentStatusHistory.findMany({
+      where: { appointment_id: testResult.appointment.appointment_id },
+      orderBy: { changed_at: 'asc' },
+      select: { status: true, notes: true, changed_at: true, changed_by_user: { select: { full_name: true } } },
+    });
+
+    // Prepare test result data
+    let testResultData: {
+      result_id: string;
+      test_code: string;
+      result_data: string;
+      status: typeof TestResultStatus[keyof typeof TestResultStatus];
+      is_abnormal: boolean;
+      notes: string | null;
+      updated_at: Date;
+      viewed_at: Date | null;
+    } | null = {
+      result_id: testResult.result_id,
+      test_code: testResult.test_code,
+      result_data: testResult.status === TestResultStatus.Completed ? testResult.result_data : 'Pending',
+      status: testResult.status,
+      is_abnormal: testResult.is_abnormal,
+      notes: testResult.notes,
+      updated_at: testResult.updated_at,
+      viewed_at: testResult.viewed_at,
+    };
+
+    // Fetch test result status history
+    const testResultStatusHistory = await this.prisma.testResultStatusHistory.findMany({
+      where: { result_id: testResult.result_id },
+      orderBy: { changed_at: 'asc' },
+      select: { status: true, notes: true, changed_at: true, changed_by_user: { select: { full_name: true } } },
+    });
+
+    // Update viewed_at if result is completed and not yet viewed
+    if (testResult.status === TestResultStatus.Completed && !testResult.viewed_at) {
+      await this.prisma.testResult.update({
+        where: { result_id: testResult.result_id },
+        data: { viewed_at: new Date() },
+      });
+    }
+
+    // Log the view action (use appointment's user_id for audit log)
+    await this.prisma.auditLog.create({
+      data: {
+        user_id: testResult.appointment.user_id,
+        action: 'VIEW_TEST_RESULT',
+        entity_type: 'TestResult',
+        entity_id: testResult.result_id,
+        details: { testCode },
+      },
+    });
+
+    // Return response
+    return {
+      appointment: {
+        appointment_id: testResult.appointment.appointment_id,
+        type: testResult.appointment.type,
+        start_time: testResult.appointment.start_time,
+        end_time: testResult.appointment.end_time,
+        status: testResult.appointment.status,
+        payment_status: testResult.appointment.payment_status,
+        location: testResult.appointment.location,
+        mode: testResult.appointment.mode,
+        service: testResult.appointment.service,
+        consultant_name: testResult.appointment.consultant?.user?.full_name || null,
+        shipping_info: testResult.appointment.mode === ServiceMode.AT_HOME ? testResult.appointment.shipping_info : null,
+        payments: testResult.appointment.payments,
+      },
+      testResult: testResultData,
+      appointmentStatusHistory,
+      testResultStatusHistory,
+      basic_info: {
+        full_name: testResult.appointment.user.full_name,
+        email: testResult.appointment.user.email,
+        phone_number: testResult.appointment.user.phone_number,
+      },
+      message: testResultData.status === TestResultStatus.Completed
+        ? 'Lấy kết quả xét nghiệm và thông tin lịch hẹn thành công'
+        : 'Kết quả xét nghiệm chưa sẵn sàng',
+    };
   }
-
-  // Log the view action (use appointment's user_id for audit log)
-  await this.prisma.auditLog.create({
-    data: {
-      user_id: testResult.appointment.user_id,
-      action: 'VIEW_TEST_RESULT',
-      entity_type: 'TestResult',
-      entity_id: testResult.result_id,
-      details: { testCode },
-    },
-  });
-
-  // Return response
-  return {
-    appointment: {
-      appointment_id: testResult.appointment.appointment_id,
-      type: testResult.appointment.type,
-      start_time: testResult.appointment.start_time,
-      end_time: testResult.appointment.end_time,
-      status: testResult.appointment.status,
-      payment_status: testResult.appointment.payment_status,
-      location: testResult.appointment.location,
-      mode: testResult.appointment.mode,
-      service: testResult.appointment.service,
-      consultant_name: testResult.appointment.consultant?.user?.full_name || null,
-      shipping_info: testResult.appointment.mode === ServiceMode.AT_HOME ? testResult.appointment.shipping_info : null,
-      payments: testResult.appointment.payments,
-    },
-    testResult: testResultData,
-    appointmentStatusHistory,
-    testResultStatusHistory,
-    basic_info: {
-      full_name: testResult.appointment.user.full_name,
-      email: testResult.appointment.user.email,
-      phone_number: testResult.appointment.user.phone_number,
-    },
-    message: testResultData.status === TestResultStatus.Completed
-      ? 'Lấy kết quả xét nghiệm và thông tin lịch hẹn thành công'
-      : 'Kết quả xét nghiệm chưa sẵn sàng',
-  };
-}
 }

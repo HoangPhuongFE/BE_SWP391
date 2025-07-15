@@ -4,7 +4,7 @@ import { PrismaService } from '@/prisma/prisma.service';
 import { UpdateCustomerProfileDto } from '../dtos/update-customer-profile.dto';
 import { UpdateConsultantProfileDto } from '../dtos/update-consultant-profile.dto';
 import { EmailService } from '@/modules/email/email.service';
-import { CloudinaryService } from 'nestjs-cloudinary'; // Import CloudinaryService
+import { CloudinaryService } from 'nestjs-cloudinary';
 import { randomInt } from 'crypto';
 import * as bcrypt from 'bcrypt';
 import { Role } from '@prisma/client';

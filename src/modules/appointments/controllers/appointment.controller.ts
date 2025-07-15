@@ -183,7 +183,7 @@ Xác nhận lịch hẹn từ Pending sang Confirmed. Hệ thống kiểm tra tr
   @ApiOperation({
     summary: 'Gửi đánh giá tư vấn',
     description: `
-Khách hàng gửi đánh giá sau khi hoàn tất lịch hẹn tư vấn. Hệ thống cập nhật điểm trung bình của Consultant.`
+Khách hàng gửi đánh giá sau khi hoàn tất lịch hẹn tư vấn. Hệ thống cập nhật điểm trung bình của tư vấn viên.`
   })
   @ApiBearerAuth('access-token')
   @ApiParam({ name: 'appointmentId', description: 'ID lịch tư vấn', type: String })
@@ -314,5 +314,19 @@ Cho phép khách hàng nhập mã xét nghiệm (test_code) và tên đầy đ�
   ) {
     const userId = req.user.userId;
     return this.appointmentService.completeConsultation(appointmentId, dto, userId);
+  }
+
+
+  @Get('consultant-appointments')
+  @Roles(Role.Consultant)
+  @UseGuards(AuthGuard('jwt'))
+  @ApiOperation({
+    summary: 'Xem danh sách lịch hẹn của Consultant',
+    description: 'Trả về danh sách các lịch hẹn được phân công cho Consultant hiện tại, bao gồm thông tin khách hàng, dịch vụ, và trạng thái.'
+  })
+  @ApiBearerAuth('access-token')
+  async getConsultantAppointments(@Req() req) {
+    const userId = (req.user as any).userId;
+    return this.appointmentService.getConsultantAppointments(userId);
   }
 } 

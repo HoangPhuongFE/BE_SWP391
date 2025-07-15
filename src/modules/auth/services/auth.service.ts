@@ -201,80 +201,80 @@ export class AuthService {
     });
   }
   async getCustomerProfile(userId: string) {
-  // Lấy thông tin User trước để kiểm tra role
-  const user = await this.prisma.user.findUnique({
-    where: { user_id: userId },
-    select: {
-      user_id: true,
-      email: true,
-      full_name: true,
-      phone_number: true,
-      address: true,
-      image: true,
-      role: true,
-      is_verified: true,
-      is_active: true,
-    },
-  });
-
-  if (!user) {
-    throw new NotFoundException('Không tìm thấy người dùng');
-  }
-
-  // Lấy CustomerProfile
-  const customerProfile = await this.prisma.customerProfile.findUnique({
-    where: { user_id: userId },
-    include: {
-      user: {
-        select: {
-          user_id: true,
-          email: true,
-          full_name: true,
-          phone_number: true,
-          address: true,
-          image: true,
-          role: true,
-          is_verified: true,
-          is_active: true,
-        },
-      },
-    },
-  });
-
-  // Lấy ConsultantProfile nếu user là Consultant
-  let consultantProfile: {
-    consultant_id: string;
-    qualifications: string | null;
-    experience: string | null;
-    specialization: string | null;
-    is_verified: boolean;
-    average_rating: number | null;
-    created_at: Date;
-    updated_at: Date;
-  } | null = null;
-  if (user.role === 'Consultant') {
-    consultantProfile = await this.prisma.consultantProfile.findUnique({
+    // Lấy thông tin User trước để kiểm tra role
+    const user = await this.prisma.user.findUnique({
       where: { user_id: userId },
       select: {
-        consultant_id: true,
-        qualifications: true,
-        experience: true,
-        specialization: true,
+        user_id: true,
+        email: true,
+        full_name: true,
+        phone_number: true,
+        address: true,
+        image: true,
+        role: true,
         is_verified: true,
-        average_rating: true,
-        created_at: true,
-        updated_at: true,
+        is_active: true,
       },
     });
-  }
 
-  // Trả về dữ liệu kết hợp
-  return {
-    user,
-    customerProfile: customerProfile || null,
-    consultantProfile: consultantProfile || null,
-  };
-}
+    if (!user) {
+      throw new NotFoundException('Không tìm thấy người dùng');
+    }
+
+    // Lấy CustomerProfile
+    const customerProfile = await this.prisma.customerProfile.findUnique({
+      where: { user_id: userId },
+      include: {
+        user: {
+          select: {
+            user_id: true,
+            email: true,
+            full_name: true,
+            phone_number: true,
+            address: true,
+            image: true,
+            role: true,
+            is_verified: true,
+            is_active: true,
+          },
+        },
+      },
+    });
+
+    // Lấy ConsultantProfile nếu user là Consultant
+    let consultantProfile: {
+      consultant_id: string;
+      qualifications: string | null;
+      experience: string | null;
+      specialization: string | null;
+      is_verified: boolean;
+      average_rating: number | null;
+      created_at: Date;
+      updated_at: Date;
+    } | null = null;
+    if (user.role === 'Consultant') {
+      consultantProfile = await this.prisma.consultantProfile.findUnique({
+        where: { user_id: userId },
+        select: {
+          consultant_id: true,
+          qualifications: true,
+          experience: true,
+          specialization: true,
+          is_verified: true,
+          average_rating: true,
+          created_at: true,
+          updated_at: true,
+        },
+      });
+    }
+
+    // Trả về dữ liệu kết hợp
+    return {
+      user,
+      customerProfile: customerProfile || null,
+      consultantProfile: consultantProfile || null,
+    };
+  }
 
   async upsertCustomerProfile(userId: string, dto: UpdateCustomerProfileDto, file?: Express.Multer.File) {
     let imageUrl: string | undefined;
@@ -503,53 +503,53 @@ export class AuthService {
   }
 
   async deleteUser(managerId: string, userId: string): Promise<void> {
-  // Kiểm tra quyền Manager hoặc Admin
-  const manager = await this.prisma.user.findUnique({
-    where: { user_id: managerId },
-  });
-  if (!manager || (manager.role !== Role.Manager && manager.role !== Role.Admin)) {
-    throw new ForbiddenException('Chỉ có Manager hoặc Admin mới có quyền xóa người dùng');
+    // Kiểm tra quyền Manager hoặc Admin
+    const manager = await this.prisma.user.findUnique({
+      where: { user_id: managerId },
+    });
+    if (!manager || (manager.role !== Role.Manager && manager.role !== Role.Admin)) {
+      throw new ForbiddenException('Chỉ có Manager hoặc Admin mới có quyền xóa người dùng');
+    }
+
+    // Kiểm tra người dùng tồn tại
+    const user = await this.prisma.user.findUnique({
+      where: { user_id: userId },
+    });
+    if (!user) {
+      throw new NotFoundException('Người dùng không tồn tại');
+    }
+
+    // Không cho phép tự xóa
+    if (managerId === userId) {
+      throw new BadRequestException('Không thể tự xóa tài khoản của chính bạn');
+    }
+
+    // Soft delete người dùng bằng cách cập nhật deleted_at
+    await this.prisma.user.update({
+      where: { user_id: userId },
+      data: {
+        deleted_at: new Date(),
+        is_active: false, // Đánh dấu không hoạt động
+      },
+    });
+
+    // Soft delete các bảng liên quan (nếu cần)
+    // Ví dụ: CustomerProfile, ConsultantProfile
+    await this.prisma.customerProfile.updateMany({
+      where: { user_id: userId },
+      data: { deleted_at: new Date() },
+    });
+
+    await this.prisma.consultantProfile.updateMany({
+      where: { user_id: userId },
+      data: { deleted_at: new Date() },
+    });
+
+    // Xóa hoặc đánh dấu các token liên quan
+    await this.prisma.token.updateMany({
+      where: { user_id: userId, is_revoked: false },
+      data: { is_revoked: true },
+    });
+
   }
-
-  // Kiểm tra người dùng tồn tại
-  const user = await this.prisma.user.findUnique({
-    where: { user_id: userId },
-  });
-  if (!user) {
-    throw new NotFoundException('Người dùng không tồn tại');
-  }
-
-  // Không cho phép tự xóa
-  if (managerId === userId) {
-    throw new BadRequestException('Không thể tự xóa tài khoản của chính bạn');
-  }
-
-  // Soft delete người dùng bằng cách cập nhật deleted_at
-  await this.prisma.user.update({
-    where: { user_id: userId },
-    data: { 
-      deleted_at: new Date(),
-      is_active: false, // Đánh dấu không hoạt động
-    },
-  });
-
-  // Soft delete các bảng liên quan (nếu cần)
-  // Ví dụ: CustomerProfile, ConsultantProfile
-  await this.prisma.customerProfile.updateMany({
-    where: { user_id: userId },
-    data: { deleted_at: new Date() },
-  });
-
-  await this.prisma.consultantProfile.updateMany({
-    where: { user_id: userId },
-    data: { deleted_at: new Date() },
-  });
-
-  // Xóa hoặc đánh dấu các token liên quan
-  await this.prisma.token.updateMany({
-    where: { user_id: userId, is_revoked: false },
-    data: { is_revoked: true },
-  });
-
-}
 }

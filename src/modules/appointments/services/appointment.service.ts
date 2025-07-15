@@ -941,7 +941,20 @@ export class AppointmentService {
   async getAppointmentById(appointmentId: string, userId: string, role: Role) {
     const appointment = await this.prisma.appointment.findUnique({
       where: { appointment_id: appointmentId, deleted_at: null },
-      include: { test_result: true },
+      include: {
+        test_result: true,
+        feedback: {
+          select: {
+            feedback_id: true,
+            rating: true,
+            comment: true,
+            is_public: true,
+            is_anonymous: true,
+            created_at: true,
+            user: { select: { full_name: true } },
+          },
+        },
+      },
     });
     if (!appointment) {
       throw new BadRequestException('Lịch hẹn không tồn tại');
@@ -973,6 +986,7 @@ export class AppointmentService {
     this.logger.log(`Xem chi tiết lịch hẹn ${appointmentId} bởi ${userId}`);
     return {
       appointment,
+      feedbacks: appointment.feedback || [], // Sử dụng feedback từ include
       appointmentStatusHistory,
       message: 'Lấy chi tiết lịch hẹn thành công',
     };
@@ -1031,30 +1045,81 @@ export class AppointmentService {
     };
   }
   async submitFeedback(appointmentId: string, dto: CreateFeedbackDto, userId: string) {
-    const appointment = await this.prisma.appointment.findUnique({
-      where: { appointment_id: appointmentId, user_id: userId, deleted_at: null },
-    });
-    if (!appointment || appointment.type !== 'Consultation') throw new BadRequestException('Lịch hẹn không hợp lệ');
+  const appointment = await this.prisma.appointment.findUnique({
+    where: { appointment_id: appointmentId, user_id: userId, deleted_at: null },
+  });
+  if (!appointment || appointment.type !== 'Consultation') {
+    throw new BadRequestException('Lịch hẹn không hợp lệ');
+  }
+  if (appointment.status !== AppointmentStatus.Completed) {
+    throw new BadRequestException('Lịch hẹn chưa hoàn thành');
+  }
+  if (!appointment.consultant_id) {
+    throw new BadRequestException('Lịch hẹn không có tư vấn viên');
+  }
 
-    const feedback = await this.prisma.feedback.create({
+  const existingFeedback = await this.prisma.feedback.findFirst({
+    where: { appointment_id: appointmentId, user_id: userId },
+  });
+
+  let feedback;
+  if (existingFeedback) {
+    feedback = await this.prisma.feedback.update({
+      where: { feedback_id: existingFeedback.feedback_id },
+      data: {
+        rating: dto.rating,
+        comment: dto.comment,
+        status: FeedbackStatus.Approved,
+        service_id: appointment.service_id, // Thêm service_id khi cập nhật
+        updated_at: new Date(),
+      },
+    });
+  } else {
+    feedback = await this.prisma.feedback.create({
       data: {
         user_id: userId,
         appointment_id: appointmentId,
+        consultant_id: appointment.consultant_id,
+        service_id: appointment.service_id, 
         rating: dto.rating,
         comment: dto.comment,
-        status: FeedbackStatus.Pending,
+        is_public: true,
+        is_anonymous: false,
+        status: FeedbackStatus.Approved,
       },
     });
-
-    const consultant = appointment.consultant_id ? await this.prisma.consultantProfile.findUnique({ where: { consultant_id: appointment.consultant_id } }) : null;
-    if (consultant) {
-      const feedbacks = await this.prisma.feedback.findMany({ where: { consultant_id: consultant.consultant_id, status: FeedbackStatus.Approved } });
-      const avgRating = feedbacks.reduce((sum, f) => sum + f.rating, 0) / (feedbacks.length + 1) || 0;
-      await this.prisma.consultantProfile.update({ where: { consultant_id: consultant.consultant_id }, data: { average_rating: avgRating } });
-    }
-
-    return { feedback, message: 'Gửi feedback thành công' };
   }
+
+  // Ghi log hành động
+  await this.prisma.auditLog.create({
+    data: {
+      user_id: userId,
+      action: existingFeedback ? 'UPDATE_FEEDBACK' : 'CREATE_FEEDBACK',
+      entity_type: 'Feedback',
+      entity_id: feedback.feedback_id,
+      details: { rating: dto.rating, comment: dto.comment, service_id: appointment.service_id },
+    },
+  });
+
+  // Cập nhật điểm trung bình cho consultant
+  const consultant = await this.prisma.consultantProfile.findUnique({
+    where: { consultant_id: appointment.consultant_id },
+  });
+  if (consultant) {
+    const feedbacks = await this.prisma.feedback.findMany({
+      where: { consultant_id: consultant.consultant_id, status: FeedbackStatus.Approved },
+    });
+    const avgRating = feedbacks.length
+      ? Number((feedbacks.reduce((sum, f) => sum + f.rating, 0) / feedbacks.length).toFixed(2))
+      : 0;
+    await this.prisma.consultantProfile.update({
+      where: { consultant_id: consultant.consultant_id },
+      data: { average_rating: avgRating },
+    });
+  }
+
+  return { feedback, message: existingFeedback ? 'Cập nhật feedback thành công' : 'Gửi feedback thành công' };
+}
 
 
 
@@ -1429,6 +1494,65 @@ export class AppointmentService {
       serviceName: appointment.service?.name || 'Không xác định',
       consultantName: appointment.consultant?.user.full_name || 'Không xác định',
       message: 'Xác nhận buổi tư vấn hoàn tất thành công',
+    };
+  }
+
+
+  async getConsultantAppointments(userId: string) {
+    const consultant = await this.prisma.consultantProfile.findUnique({
+      where: { user_id: userId },
+    });
+    if (!consultant) {
+      throw new NotFoundException('Không tìm thấy hồ sơ Consultant');
+    }
+
+    const appointments = await this.prisma.appointment.findMany({
+      where: {
+        consultant_id: consultant.consultant_id,
+        deleted_at: null,
+        status: { not: AppointmentStatus.Cancelled },
+      },
+      include: {
+        user: { select: { user_id: true, full_name: true, email: true, phone_number: true } },
+        service: { select: { service_id: true, name: true, category: true } },
+        schedule: { select: { schedule_id: true, start_time: true, end_time: true } },
+        feedback: {
+          select: {
+            feedback_id: true,
+            rating: true,
+            comment: true,
+            is_public: true,
+            is_anonymous: true,
+            created_at: true,
+            user: { select: { full_name: true } },
+          },
+        },
+      },
+      orderBy: { start_time: 'asc' },
+    });
+
+    return {
+      appointments: appointments.map((appt) => ({
+        appointment_id: appt.appointment_id,
+        type: appt.type,
+        start_time: appt.start_time,
+        end_time: appt.end_time,
+        status: appt.status,
+        payment_status: appt.payment_status,
+        location: appt.location,
+        mode: appt.mode,
+        user: {
+          user_id: appt.user.user_id,
+          full_name: appt.user.full_name,
+          email: appt.user.email,
+          phone_number: appt.user.phone_number,
+        },
+        service: appt.service,
+        schedule: appt.schedule,
+        feedback: appt.feedback || [],
+      })),
+      total: appointments.length,
+      message: appointments.length > 0 ? 'Lấy danh sách lịch hẹn thành công' : 'Không có lịch hẹn nào',
     };
   }
 }

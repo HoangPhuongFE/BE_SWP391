@@ -283,7 +283,7 @@ model Appointment {
   shipping_info                 ShippingInfo?              
   return_shipping_info ReturnShippingInfo?  // Chiều trả mẫu
   mode ServiceMode? 
-  @@index([mode])
+  feedback                      Feedback[]                 @relation("AppointmentFeedback") // Thêm quan hệ  @@index([mode])
   @@index([status, created_at]) // Hỗ trợ lọc trạng thái và thời gian trong appointments/stats
   @@index([service_id, user_id]) // Hỗ trợ customers/service-usage và services/stats
   @@index([consultant_id]) // Tối ưu join với ConsultantProfile trong feedback/stats
@@ -421,7 +421,7 @@ model Feedback {
   updated_at     DateTime           @updatedAt
   deleted_at     DateTime?
   appointment_id String?            @db.Char(36) // Xóa @relation, chỉ giữ tham chiếu
-
+  appointment    Appointment?       @relation("AppointmentFeedback", fields: [appointment_id], references: [appointment_id])
   @@index([user_id, status])
   @@index([consultant_id, status])
   @@index([status, created_at]) 

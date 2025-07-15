@@ -538,7 +538,7 @@ model Schedule {
   deleted_at               DateTime?
   appointment              Appointment?      @relation(name: "AppointmentToSchedule")
   max_appointments_per_day Int?              @default(5) // Giới hạn số lịch hẹn/ngày
-
+  @@index([consultant_id, start_time, end_time]) 
   @@index([consultant_id, start_time])
   @@index([service_id])
 }

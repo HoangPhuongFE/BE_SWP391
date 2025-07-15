@@ -12,7 +12,7 @@ import { BatchCreateScheduleDto } from '../dtos/batch-create-schedule.dto';
 @ApiTags('Schedules')
 @Controller('schedules')
 export class ScheduleController {
-  constructor(private readonly scheduleService: ScheduleService) {}
+  constructor(private readonly scheduleService: ScheduleService) { }
 
   /**
    * Consultant tạo lịch trống mới.
@@ -26,7 +26,7 @@ export class ScheduleController {
   @UseGuards(AuthGuard('jwt'))
   @ApiOperation({
     summary: 'Consultant tạo lịch trống',
-    description: 'Consultant tạo lịch trống với thời gian và dịch vụ. Thời gian phải trong tương lai, không trùng, tối đa 2 giờ. Trả về lịch vừa tạo.',
+    description: 'Consultant tạo lịch trống với thời gian và dịch vụ. Thời gian phải trong tương lai, không trùng, tối đa 2 giờ, trong 2 tháng, không trước năm sau. Trả về lịch và thông tin dịch vụ.',
   })
   @ApiBearerAuth('access-token')
   @ApiBody({ type: CreateScheduleDto })
@@ -174,7 +174,7 @@ export class ScheduleController {
   @UseGuards(AuthGuard('jwt'))
   @ApiOperation({
     summary: 'Tư vấn viên tạo nhiều lịch trống',
-    description: 'Tạo hàng loạt lịch trống trong khoảng thời gian với độ dài mỗi lịch. Trả về số lịch tạo và danh sách lịch.',
+    description: 'Tạo hàng loạt lịch trống trong khoảng thời gian (2 tháng, không trước năm sau) với độ dài mỗi slot 15-120 phút. Trả về số lịch tạo, danh sách lịch, và thông tin dịch vụ.',
   })
   @ApiBearerAuth('access-token')
   @ApiBody({ type: BatchCreateScheduleDto })

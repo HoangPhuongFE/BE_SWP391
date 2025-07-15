@@ -1,3 +1,4 @@
+22
 import { IsOptional, IsString, IsDateString, IsEnum, IsPhoneNumber } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Gender } from '@prisma/client';
@@ -55,11 +56,11 @@ export class UpdateCustomerProfileDto {
   fullName?: string;
 
   @ApiPropertyOptional({
-    example: '+84912345678',
+    example: '0912345678',
     description: 'Số điện thoại của người dùng',
   })
   @IsOptional()
-  @IsPhoneNumber()
+  @IsString()
   phoneNumber?: string;
 
   @ApiPropertyOptional({

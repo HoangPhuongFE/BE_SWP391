@@ -203,7 +203,7 @@ export class AuthService {
   async getCustomerProfile(userId: string) {
     // Lấy thông tin User trước để kiểm tra role
     const user = await this.prisma.user.findUnique({
-      where: { user_id: userId },
+      where: { user_id: userId , deleted_at: null },
       select: {
         user_id: true,
         email: true,
@@ -339,7 +339,7 @@ export class AuthService {
 
   async getConsultantProfile(userId: string) {
     const profile = await this.prisma.consultantProfile.findUnique({
-      where: { user_id: userId },
+      where: { user_id: userId , deleted_at: null },
     });
     return profile;
   }
@@ -363,6 +363,7 @@ export class AuthService {
 
   async getAllCustomerProfiles() {
     return this.prisma.customerProfile.findMany({
+      where: { deleted_at: null },
       include: {
         user: {
           select: {
@@ -384,7 +385,7 @@ export class AuthService {
 
   async getAllConsultantProfiles() {
     return this.prisma.user.findMany({
-      where: { role: 'Consultant' }, // Adjust role value as needed
+      where: { role: 'Consultant', deleted_at: null }, // Adjust role value as needed
       include: {
         consultant: true, // Will be null if not exists
       },
@@ -477,6 +478,7 @@ export class AuthService {
 
   async getAllUsersWithProfiles() {
     const users = await this.prisma.user.findMany({
+      where: { deleted_at: null },
       include: {
         customer: true,
         consultant: true,
@@ -492,7 +494,6 @@ export class AuthService {
       full_name: user.full_name,
       phone_number: user.phone_number,
       address: user.address,
-
       role: user.role,
       is_verified: user.is_verified,
       is_active: user.is_active,

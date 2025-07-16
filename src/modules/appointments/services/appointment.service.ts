@@ -297,8 +297,8 @@ export class AppointmentService {
         deleted_at: null,
       },
     });
-    if (userAppointments >= 3) {
-      throw new BadRequestException('Bạn chỉ có thể đặt 3 lịch xét nghiệm mỗi ngày');
+    if (userAppointments >= 2) {
+      throw new BadRequestException('Bạn chỉ có thể đặt 2 lịch xét nghiệm mỗi ngày');
     }
 
     // Kiểm tra dịch vụ

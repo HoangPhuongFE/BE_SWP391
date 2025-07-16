@@ -812,7 +812,7 @@ export class AppointmentService {
     const result = await this.prisma.$transaction(async (prisma) => {
       // 1. Tìm kết quả
       const testResult = await prisma.testResult.findUnique({
-        where: { test_code: testCode },
+        where: { test_code: testCode, deleted_at: null },
         include: {
           appointment: {
             include: {
@@ -1263,7 +1263,7 @@ export class AppointmentService {
 
     // Find test result by testCode
     const testResult = await this.prisma.testResult.findUnique({
-      where: { test_code: testCode },
+      where: { test_code: testCode, deleted_at: null },
       include: {
         appointment: {
           include: {
@@ -1372,54 +1372,91 @@ export class AppointmentService {
   }
 
 
-  async startConsultation(appointmentId: string, userId: string) {
-    const appointment = await this.prisma.appointment.findUnique({
-      where: { appointment_id: appointmentId, deleted_at: null },
-      include: { consultant: true },
-    });
-    if (!appointment) {
-      throw new BadRequestException('Lịch hẹn không tồn tại');
-    }
-    if (appointment.type !== 'Consultation') {
-      throw new BadRequestException('Chỉ áp dụng cho lịch hẹn tư vấn');
-    }
-    if (appointment.status !== AppointmentStatus.Confirmed) {
-      throw new BadRequestException('Lịch hẹn phải ở trạng thái Confirmed');
-    }
-    const consultant = await this.prisma.consultantProfile.findUnique({
-      where: { user_id: userId },
-    });
-    if (!consultant || appointment.consultant_id !== consultant.consultant_id) {
-      throw new ForbiddenException('Bạn không có quyền xác nhận buổi tư vấn này');
-    }
+ async startConsultation(appointmentId: string, userId: string) {
+  const appointment = await this.prisma.appointment.findUnique({
+    where: { appointment_id: appointmentId, deleted_at: null },
+    include: {
+      consultant: { include: { user: { select: { full_name: true, email: true } } } },
+      user: { select: { email: true, full_name: true } },
+      service: { select: { name: true } },
+    },
+  });
 
-    const updatedAppointment = await this.prisma.$transaction([
-      this.prisma.appointment.update({
-        where: { appointment_id: appointmentId },
-        data: { status: AppointmentStatus.InProgress, updated_at: new Date() },
-      }),
-      this.prisma.appointmentStatusHistory.create({
-        data: {
-          appointment_id: appointmentId,
-          status: AppointmentStatus.InProgress,
-          notes: 'Buổi tư vấn đã bắt đầu',
-          changed_by: userId,
-        },
-      }),
-      this.prisma.notification.create({
-        data: {
-          user_id: appointment.user_id,
-          type: NotificationType.Email,
-          title: 'Buổi tư vấn đã bắt đầu',
-          content: `Buổi tư vấn của bạn với mã ${appointmentId} đã bắt đầu vào ${new Date().toISOString()}.`,
-          status: NotificationStatus.Pending,
-        },
-      }),
-    ]);
-
-    this.logger.log(`Buổi tư vấn ${appointmentId} được xác nhận bắt đầu bởi Consultant ${userId}`);
-    return { appointment: updatedAppointment[0], message: 'Xác nhận buổi tư vấn bắt đầu thành công' };
+  if (!appointment) {
+    throw new BadRequestException('Lịch hẹn không tồn tại');
   }
+  if (appointment.type !== 'Consultation') {
+    throw new BadRequestException('Chỉ áp dụng cho lịch hẹn tư vấn');
+  }
+  if (appointment.status !== AppointmentStatus.Confirmed) {
+    throw new BadRequestException('Lịch hẹn phải ở trạng thái Confirmed để bắt đầu');
+  }
+
+  const consultant = await this.prisma.consultantProfile.findUnique({
+    where: { user_id: userId },
+  });
+  if (!consultant || appointment.consultant_id !== consultant.consultant_id) {
+    throw new ForbiddenException('Bạn không có quyền bắt đầu buổi tư vấn này');
+  }
+
+  let notificationStatus: NotificationStatus = NotificationStatus.Pending;
+  try {
+    await this.emailService.sendEmail(
+      appointment.user.email,
+      'Buổi tư vấn đã bắt đầu',
+      `Buổi tư vấn của bạn (mã ${appointmentId}) với tư vấn viên ${appointment.consultant?.user.full_name || 'Không xác định'} cho dịch vụ ${appointment.service?.name || 'Không xác định'} đã bắt đầu vào ${new Date().toISOString()}.`,
+    );
+    notificationStatus = NotificationStatus.Sent;
+  } catch (error) {
+    this.logger.error(`Gửi email thất bại cho ${appointment.user.email}:`, error);
+    notificationStatus = NotificationStatus.Failed;
+  }
+
+  const updatedAppointment = await this.prisma.$transaction([
+    this.prisma.appointment.update({
+      where: { appointment_id: appointmentId },
+      data: {
+        status: AppointmentStatus.InProgress,
+        updated_at: new Date(),
+      },
+    }),
+    this.prisma.appointmentStatusHistory.create({
+      data: {
+        appointment_id: appointmentId,
+        status: AppointmentStatus.InProgress,
+        notes: 'Buổi tư vấn đã bắt đầu',
+        changed_by: userId,
+        changed_at: new Date(), 
+      },
+    }),
+    this.prisma.notification.create({
+      data: {
+        user_id: appointment.user_id,
+        type: NotificationType.Email,
+        title: 'Buổi tư vấn đã bắt đầu',
+        content: `Buổi tư vấn của bạn với mã ${appointmentId} đã bắt đầu.`,
+        status: notificationStatus,
+      },
+    }),
+    this.prisma.auditLog.create({
+      data: {
+        user_id: userId,
+        action: 'START_CONSULTATION',
+        entity_type: 'Appointment',
+        entity_id: appointmentId,
+        details: { status: AppointmentStatus.InProgress },
+      },
+    }),
+  ]);
+
+  this.logger.log(`Buổi tư vấn ${appointmentId} đã bắt đầu bởi Consultant ${userId}`);
+  return {
+    appointment: updatedAppointment[0],
+    serviceName: appointment.service?.name || 'Không xác định',
+    consultantName: appointment.consultant?.user.full_name || 'Không xác định',
+    message: 'Bắt đầu buổi tư vấn thành công',
+  };
+}
 
 
   async completeConsultation(appointmentId: string, dto: CompleteConsultationDto, userId: string) {
@@ -1501,7 +1538,7 @@ export class AppointmentService {
 
   async getConsultantAppointments(userId: string) {
     const consultant = await this.prisma.consultantProfile.findUnique({
-      where: { user_id: userId },
+      where: { user_id: userId, deleted_at: null },
     });
     if (!consultant) {
       throw new NotFoundException('Không tìm thấy hồ sơ Consultant');

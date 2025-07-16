@@ -293,11 +293,12 @@ export class AppointmentService {
         user_id: userId,
         start_time: { gte: startOfDay, lte: endOfDay },
         status: { not: 'Cancelled' },
+        payment_status: PaymentStatus.Paid,
         deleted_at: null,
       },
     });
-    if (userAppointments > 0) {
-      throw new BadRequestException('Bạn chỉ có thể đặt 1 lịch xét nghiệm mỗi ngày');
+    if (userAppointments >= 3) {
+      throw new BadRequestException('Bạn chỉ có thể đặt 3 lịch xét nghiệm mỗi ngày');
     }
 
     // Kiểm tra dịch vụ

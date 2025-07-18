@@ -11,6 +11,7 @@ export enum ServiceType {
 export enum ServiceMode {
   AT_HOME = 'AT_HOME',
   AT_CLINIC = 'AT_CLINIC',
+  ONLINE = "ONLINE",
 }
 
 export class CreateServiceDto {

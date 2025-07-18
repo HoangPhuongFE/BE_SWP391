@@ -33,9 +33,8 @@ import { CompleteConsultationDto } from '../dtos/complete-consultation.dto';
 @ApiTags('Appointments')
 @Controller('appointments')
 export class AppointmentController {
-  constructor(private readonly appointmentService: AppointmentService) {}
+  constructor(private readonly appointmentService: AppointmentService) { }
 
-  // API cho Customer
   @Post()
   @Roles(Role.Customer)
   @UseGuards(AuthGuard('jwt'))
@@ -44,7 +43,13 @@ export class AppointmentController {
     description: `
 Tạo một lịch hẹn tư vấn với Consultant. Hệ thống sẽ kiểm tra lịch trống, dịch vụ, Consultant và quyền miễn phí nếu có. Nếu hợp lệ sẽ tạo lịch hẹn miễn phí. Nếu không, hệ thống sẽ trả về link thanh toán.
 
-Để được miễn phí, khách hàng phải hoàn tất một lịch xét nghiệm (Testing) trong vòng 30 ngày, chưa từng sử dụng quyền miễn phí từ lịch đó. Gửi ID lịch xét nghiệm thông qua test_code trong body. Hệ thống sẽ kiểm tra mã này và nếu hợp lệ, sẽ tạo lịch hẹn tư vấn miễn phí mà không cần thanh toán.`
+Để được miễn phí, khách hàng phải hoàn tất một lịch xét nghiệm (Testing) trong vòng 30 ngày, chưa từng sử dụng quyền miễn phí từ lịch đó. Gửi ID lịch xét nghiệm thông qua test_code trong body. Hệ thống sẽ kiểm tra mã này và nếu hợp lệ, sẽ tạo lịch hẹn tư vấn miễn phí mà không cần thanh toán.
+
+**Hình thức tư vấn (mode)**:
+- AT_HOME: Tư vấn tại nhà, yêu cầu location.
+- AT_CLINIC: Tư vấn tại phòng khám, yêu cầu location.
+- ONLINE: Tư vấn qua Google Meet, có thể cung cấp meeting_link (tùy chọn, phải bắt đầu bằng https://meet.google.com).
+`,
   })
   @ApiBearerAuth('access-token')
   @ApiBody({
@@ -54,9 +59,12 @@ Body gồm:
 - schedule_id: ID lịch trống (bắt buộc)
 - service_id: ID dịch vụ tư vấn (bắt buộc)
 - consultant_id: ID chuyên gia (tùy chọn, phải trùng với lịch)
-- location: địa điểm nếu offline (tùy chọn)
-- type: luôn là 'Consultation'
-- test_code: mã xét nghiệm (tùy chọn, nếu có sẽ kiểm tra quyền miễn phí)`
+- location: Địa điểm nếu AT_HOME hoặc AT_CLINIC (tùy chọn)
+- type: Luôn là 'Consultation'
+- test_code: Mã xét nghiệm (tùy chọn, để miễn phí)
+- mode: Hình thức tư vấn (AT_HOME, AT_CLINIC, ONLINE)
+- meeting_link: Link Google Meet (tùy chọn, chỉ cho mode ONLINE)
+`,
   })
   async createAppointment(@Body() dto: CreateAppointmentDto, @Req() req) {
     const userId = (req.user as any).userId;
@@ -247,11 +255,25 @@ Trả về danh sách lịch hẹn đang ở trạng thái Pending dành cho Sta
   @ApiOperation({
     summary: 'Xác nhận lịch hẹn',
     description: `
-Xác nhận lịch hẹn từ Pending sang Confirmed. Hệ thống kiểm tra trạng thái thanh toán và lịch trống.`
+Xác nhận lịch hẹn từ Pending sang Confirmed. Hệ thống kiểm tra trạng thái thanh toán, lịch trống, và tính hợp lệ của meeting_link (nếu cung cấp).
+
+**Link Google Meet**:
+- Chỉ áp dụng khi lịch hẹn có mode là ONLINE (được chọn khi tạo lịch hẹn).
+- Phải bắt đầu bằng https://meet.google.com.
+- Nếu cung cấp, hệ thống gửi email thông báo chứa link cho khách hàng và consultant.
+- Nếu không cung cấp và mode là ONLINE, hệ thống ghi log cảnh báo nhưng vẫn cho phép xác nhận.
+`,
   })
   @ApiBearerAuth('access-token')
   @ApiParam({ name: 'appointmentId', description: 'ID lịch hẹn', type: String })
-  @ApiBody({ type: ConfirmAppointmentDto })
+  @ApiBody({
+    type: ConfirmAppointmentDto,
+    description: `
+Body gồm:
+- notes: Ghi chú khi xác nhận (tùy chọn)
+- meeting_link: Link Google Meet (tùy chọn, chỉ cho mode ONLINE)
+`,
+  })
   async confirmAppointment(
     @Param('appointmentId') appointmentId: string,
     @Body() dto: ConfirmAppointmentDto,
@@ -287,11 +309,29 @@ Cho phép cập nhật trạng thái lịch hẹn xét nghiệm. Hệ thống s�
   @ApiOperation({
     summary: 'Cập nhật thông tin lịch hẹn',
     description: `
-Cho phép chỉnh sửa thông tin lịch hẹn như thời gian, dịch vụ, ghi chú tư vấn. Hệ thống kiểm tra trùng lặp thời gian và dịch vụ hợp lệ.`
+Cho phép chỉnh sửa thông tin lịch hẹn như thời gian, dịch vụ, ghi chú tư vấn, hình thức tư vấn (mode), và link Google Meet (nếu mode là ONLINE). Hệ thống kiểm tra trùng lặp thời gian, dịch vụ hợp lệ, và tính hợp lệ của mode/meeting_link.
+
+**Hình thức tư vấn (mode)**:
+- AT_HOME: Tư vấn tại nhà, yêu cầu location.
+- AT_CLINIC: Tư vấn tại phòng khám, yêu cầu location.
+- ONLINE: Tư vấn qua Google Meet, có thể cung cấp meeting_link (phải bắt đầu bằng https://meet.google.com).
+`,
   })
   @ApiBearerAuth('access-token')
   @ApiParam({ name: 'appointmentId', description: 'ID lịch hẹn', type: String })
-  @ApiBody({ type: UpdateAppointmentDto })
+  @ApiBody({
+    type: UpdateAppointmentDto,
+    description: `
+Body gồm:
+- consultation_notes: Ghi chú tư vấn (tùy chọn, chỉ cho Consultation)
+- start_time: Thời gian bắt đầu (tùy chọn, định dạng ISO)
+- end_time: Thời gian kết thúc (tùy chọn, định dạng ISO)
+- location: Địa điểm (tùy chọn, áp dụng cho AT_HOME hoặc AT_CLINIC)
+- service_id: ID dịch vụ (tùy chọn)
+- mode: Hình thức tư vấn (tùy chọn, AT_HOME, AT_CLINIC, ONLINE)
+- meeting_link: Link Google Meet (tùy chọn, chỉ cho mode ONLINE)
+`,
+  })
   async updateAppointment(
     @Param('appointmentId') appointmentId: string,
     @Body() dto: UpdateAppointmentDto,

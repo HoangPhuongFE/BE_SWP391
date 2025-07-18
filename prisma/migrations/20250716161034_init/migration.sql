@@ -120,6 +120,7 @@ CREATE TABLE `Appointment` (
     `type` ENUM('Consultation', 'Testing') NOT NULL,
     `start_time` DATETIME(3) NOT NULL,
     `end_time` DATETIME(3) NOT NULL,
+    `meeting_link` VARCHAR(255) NULL,
     `status` ENUM('Pending', 'Confirmed', 'InProgress', 'SampleCollected', 'Completed', 'Cancelled') NOT NULL DEFAULT 'Pending',
     `location` VARCHAR(255) NULL,
     `payment_status` ENUM('Pending', 'Paid', 'Failed') NOT NULL DEFAULT 'Pending',
@@ -134,7 +135,7 @@ CREATE TABLE `Appointment` (
     `free_consultation_valid_until` DATETIME(3) NULL,
     `payment_refunded` BOOLEAN NOT NULL DEFAULT false,
     `sample_collected_date` DATETIME(3) NULL,
-    `mode` ENUM('AT_HOME', 'AT_CLINIC') NULL,
+    `mode` ENUM('AT_HOME', 'AT_CLINIC', 'ONLINE') NULL,
 
     UNIQUE INDEX `Appointment_schedule_id_key`(`schedule_id`),
     INDEX `Appointment_status_created_at_idx`(`status`, `created_at`),

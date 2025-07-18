@@ -1,6 +1,6 @@
-import { IsString, IsEnum, IsOptional } from 'class-validator';
+import { IsString, IsEnum, IsOptional, IsUrl } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { AppointmentType } from '@prisma/client';
+import { AppointmentType, ServiceMode } from '@prisma/client';
 
 export class CreateAppointmentDto {
   @ApiProperty({ example: 'con001', description: 'ID của Consultant muốn đặt lịch (tùy chọn).' })
@@ -20,7 +20,7 @@ export class CreateAppointmentDto {
   @IsEnum(AppointmentType)
   type: AppointmentType;
 
-  @ApiPropertyOptional({ example: 'Phòng khám A', description: 'Địa điểm tư vấn (tùy chọn, áp dụng nếu tư vấn tại phòng khám).' })
+  @ApiPropertyOptional({ example: 'Phòng khám A', description: 'Địa điểm tư vấn (tùy chọn, áp dụng nếu mode là AT_CLINIC hoặc AT_HOME).' })
   @IsString()
   @IsOptional()
   location?: string;
@@ -29,30 +29,39 @@ export class CreateAppointmentDto {
     example: 'STI-12345',
     description: `
 Mã xét nghiệm (**test_code**) từ kết quả xét nghiệm đã hoàn tất, để yêu cầu được **tư vấn miễn phí**.
-
 **Chỉ áp dụng nếu:**
 - Mã xét nghiệm thuộc lịch hẹn xét nghiệm (type = 'Testing')
 - Lịch hẹn xét nghiệm có trạng thái = 'Completed'
 - Chưa từng sử dụng để đặt tư vấn miễn phí
 - Còn hiệu lực trong vòng 30 ngày kể từ khi hoàn tất
-
 **Cách kiểm tra trên FE**:
-Gọi API:
-  \`GET /appointments/validate-test-code/:testCode\`
-
-Nếu trả về:
-  \`{ "valid": true }\` ⇒ Gắn mã xét nghiệm đó vào đây để được miễn phí tư vấn
-
+Gọi API: \`GET /appointments/validate-test-code/:testCode\`
+Nếu trả về: \`{ "valid": true }\` ⇒ Gắn mã xét nghiệm đó vào đây để được miễn phí tư vấn
 Nếu hợp lệ:
 - Hệ thống sẽ đánh dấu \`is_free_consultation = true\`
 - Không tạo thanh toán
 - Lịch tư vấn sẽ miễn phí và chờ xác nhận từ hệ thống
-
 Nếu không hợp lệ:
 - Backend sẽ trả lỗi 400: "Mã xét nghiệm không hợp lệ hoặc đã hết hạn miễn phí"
-    `
+    `,
   })
   @IsString()
   @IsOptional()
   test_code?: string;
+
+  @ApiProperty({
+    example: 'ONLINE',
+    enum: ServiceMode,
+    description: 'Hình thức tư vấn: AT_HOME, AT_CLINIC, hoặc ONLINE. Phải nằm trong danh sách available_modes của dịch vụ.',
+  })
+  @IsEnum(ServiceMode)
+  mode: ServiceMode;
+
+  @ApiPropertyOptional({
+    example: 'https://meet.google.com/xxx-xxxx-xxx',
+    description: 'Link hội nghị trực tuyến (tùy chọn, chỉ áp dụng khi mode là ONLINE). Phải là URL hợp lệ (ví dụ: Google Meet, Zoom, Microsoft Teams).',
+  })
+  @IsOptional()
+  @IsUrl()
+  meeting_link?: string;
 }

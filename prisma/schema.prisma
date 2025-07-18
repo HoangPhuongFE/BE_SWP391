@@ -108,6 +108,7 @@ enum ServiceType {
 enum ServiceMode {
   AT_HOME
   AT_CLINIC
+  ONLINE
 }
 
 enum ShippingStatus {
@@ -261,6 +262,7 @@ model Appointment {
   type                          AppointmentType
   start_time                    DateTime
   end_time                      DateTime
+  meeting_link                  String?                    @db.VarChar(255)
   status                        AppointmentStatus          @default(Pending)
   location                      String?                    @db.VarChar(255)
   payment_status                PaymentStatus              @default(Pending)

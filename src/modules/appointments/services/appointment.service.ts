@@ -57,7 +57,7 @@ export class AppointmentService {
 
 
   async createAppointment(dto: CreateAppointmentDto & { userId: string }) {
-    const { consultant_id, schedule_id, service_id, type, location, userId, test_code } = dto;
+    const { consultant_id, schedule_id, service_id, type, location, userId, test_code, mode, meeting_link } = dto;
 
     // Kiểm tra thời gian hợp lệ
     const now = new Date();
@@ -66,8 +66,7 @@ export class AppointmentService {
     });
     if (!schedule) throw new BadRequestException('Lịch trống không tồn tại hoặc đã được đặt');
 
-    // Kiểm tra năm và khoảng thời gian
-    const maxDate = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000); // 2 tháng
+    const maxDate = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000);
     if (schedule.start_time.getFullYear() > now.getFullYear()) {
       throw new BadRequestException('Không thể đặt lịch trước năm sau');
     }
@@ -75,19 +74,33 @@ export class AppointmentService {
       throw new BadRequestException('Lịch hẹn phải trong vòng 2 tháng từ hiện tại và không sớm hơn hôm nay');
     }
 
-    // Kiểm tra dịch vụ
+    // Kiểm tra dịch vụ và mode
     const svc = await this.prisma.service.findUnique({
       where: { service_id, deleted_at: null },
     });
     if (!svc || svc.type !== ServiceType.Consultation) throw new BadRequestException('Dịch vụ không hợp lệ');
+    const availableModes: ServiceMode[] = Array.isArray(svc.available_modes)
+      ? svc.available_modes
+      : typeof svc.available_modes === 'string'
+        ? JSON.parse(svc.available_modes)
+        : [];
+    if (!availableModes.includes(mode as ServiceMode)) throw new BadRequestException('Hình thức tư vấn không được hỗ trợ bởi dịch vụ này');
 
-    // Kiểm tra tư vấn viên (nếu có)
+    // Kiểm tra meeting_link
+    if (mode === ServiceMode.ONLINE && meeting_link && !meeting_link.startsWith('https://meet.google.com')) {
+      throw new BadRequestException('Link Google Meet không hợp lệ');
+    }
+    if (mode !== ServiceMode.ONLINE && meeting_link) {
+      throw new BadRequestException('Link Google Meet chỉ áp dụng cho mode ONLINE');
+    }
+
+    // Kiểm tra consultant
     if (consultant_id) {
       const consultant = await this.prisma.consultantProfile.findUnique({ where: { consultant_id } });
       if (!consultant || consultant.consultant_id !== schedule.consultant_id) throw new BadRequestException('Consultant không hợp lệ');
     }
 
-    // Kiểm tra trùng lịch với consultant
+    // Kiểm tra trùng lịch
     const overlap = await this.prisma.appointment.findFirst({
       where: {
         consultant_id: schedule.consultant_id,
@@ -98,7 +111,6 @@ export class AppointmentService {
     });
     if (overlap) throw new BadRequestException('Thời gian trùng lịch hẹn khác');
 
-    // Kiểm tra trùng lịch của người dùng với cùng dịch vụ
     const userOverlap = await this.prisma.appointment.findFirst({
       where: {
         user_id: userId,
@@ -167,11 +179,13 @@ export class AppointmentService {
         end_time: schedule.end_time,
         status: 'Pending',
         payment_status: isFreeConsultation ? 'Paid' : 'Pending',
-        location,
+        location: mode === ServiceMode.ONLINE ? null : location,
         service_id,
         schedule_id,
         is_free_consultation: isFreeConsultation,
         related_appointment_id,
+        mode,
+        meeting_link: mode === ServiceMode.ONLINE ? meeting_link : null,
       },
     });
 
@@ -180,13 +194,69 @@ export class AppointmentService {
       data: {
         appointment_id: appt.appointment_id,
         status: 'Pending',
-        notes: isFreeConsultation ? 'Tạo lịch hẹn tư vấn miễn phí' : 'Tạo lịch hẹn tư vấn',
+        notes: isFreeConsultation
+          ? `Tạo lịch hẹn tư vấn miễn phí (${mode})`
+          : `Tạo lịch hẹn tư vấn (${mode}${meeting_link ? `, link: ${meeting_link}` : ''})`,
         changed_by: userId,
       },
     });
 
     // Cập nhật trạng thái lịch
     await this.prisma.schedule.update({ where: { schedule_id }, data: { is_booked: true } });
+
+    // Ghi audit log
+    await this.prisma.auditLog.create({
+      data: {
+        user_id: userId,
+        action: 'CREATE_APPOINTMENT',
+        entity_type: 'Appointment',
+        entity_id: appt.appointment_id,
+        details: { mode, meeting_link, isFreeConsultation },
+      },
+    });
+
+    // Gửi email thông báo
+    if (mode === ServiceMode.ONLINE && meeting_link) {
+      const user = await this.prisma.user.findUnique({ where: { user_id: userId }, select: { email: true, full_name: true } });
+      const consultant = consultant_id
+        ? await this.prisma.consultantProfile.findUnique({
+          where: { consultant_id },
+          include: { user: { select: { email: true, full_name: true } } },
+        })
+        : null;
+
+      const emailContent = `Lịch hẹn tư vấn của bạn (mã ${appt.appointment_id}) đã được tạo. Tham gia qua Google Meet: ${meeting_link}`;
+      try {
+        if (user && user.email) {
+          await this.emailService.sendEmail(user.email, 'Lịch hẹn tư vấn đã được tạo', emailContent);
+        }
+        if (consultant && consultant.user && consultant.user.email) {
+          await this.emailService.sendEmail(consultant.user.email, 'Lịch hẹn tư vấn mới', emailContent);
+        }
+        await this.prisma.notification.create({
+          data: {
+            user_id: userId,
+            type: NotificationType.Email,
+            title: 'Lịch hẹn tư vấn đã được tạo',
+            content: emailContent,
+            status: NotificationStatus.Pending,
+          },
+        });
+        if (consultant) {
+          await this.prisma.notification.create({
+            data: {
+              user_id: consultant.user_id,
+              type: NotificationType.Email,
+              title: 'Lịch hẹn tư vấn mới',
+              content: emailContent,
+              status: NotificationStatus.Pending,
+            },
+          });
+        }
+      } catch (error) {
+        this.logger.error(`Gửi email thất bại: ${error.message}`);
+      }
+    }
 
     // Tạo thanh toán nếu không miễn phí
     if (!isFreeConsultation) {
@@ -200,7 +270,6 @@ export class AppointmentService {
       }
       if (!orderCode) throw new BadRequestException('Tạo mã thanh toán thất bại');
 
-      // Tạo bản ghi Payment trước
       await this.prisma.payment.create({
         data: {
           appointment_id: appt.appointment_id,
@@ -209,7 +278,7 @@ export class AppointmentService {
           payment_method: PaymentMethod.BankCard,
           status: PaymentTransactionStatus.Pending,
           order_code: orderCode,
-          expires_at: new Date(Date.now() + 30 * 60 * 1000), // 30 phút
+          expires_at: new Date(Date.now() + 30 * 60 * 1000),
         },
       });
 
@@ -303,7 +372,7 @@ export class AppointmentService {
 
     // Kiểm tra dịch vụ
     const svc = await this.prisma.service.findUnique({
-      where: { service_id: serviceId, deleted_at: null },
+      where: { service_id: serviceId ?? undefined, deleted_at: null },
     });
     if (!svc || svc.type !== ServiceType.Testing || !svc.testing_hours || !svc.daily_capacity) {
       throw new BadRequestException('Dịch vụ không hợp lệ hoặc chưa được cấu hình');
@@ -676,15 +745,45 @@ export class AppointmentService {
   async updateAppointment(appointmentId: string, dto: UpdateAppointmentDto) {
     const appointment = await this.prisma.appointment.findUnique({
       where: { appointment_id: appointmentId, deleted_at: null },
+      include: {
+        service: true,
+        consultant: { include: { user: { select: { email: true, full_name: true } } } },
+        user: { select: { email: true, full_name: true } },
+      },
     });
-    if (!appointment) {
-      throw new BadRequestException('Lịch hẹn không tồn tại');
-    }
+    if (!appointment) throw new BadRequestException('Lịch hẹn không tồn tại');
 
     if (dto.consultation_notes && appointment.type !== 'Consultation') {
       throw new BadRequestException('Ghi chú tư vấn chỉ áp dụng cho lịch hẹn tư vấn');
     }
 
+    // Kiểm tra dịch vụ
+    const serviceId = dto.service_id || appointment.service_id;
+    const svc = await this.prisma.service.findUnique({
+      where: { service_id: serviceId ?? undefined, deleted_at: null },
+    });
+    if (!svc) throw new BadRequestException('Dịch vụ không tồn tại');
+
+    // Kiểm tra mode
+    const availableModes: ServiceMode[] = Array.isArray(svc.available_modes)
+      ? svc.available_modes
+      : typeof svc.available_modes === 'string'
+        ? JSON.parse(svc.available_modes)
+        : [];
+    if (dto.mode && !availableModes.includes(dto.mode as unknown as ServiceMode)) {
+      throw new BadRequestException('Hình thức tư vấn không được hỗ trợ bởi dịch vụ này');
+    }
+
+    // Kiểm tra meeting_link
+    const effectiveMode = dto.mode || appointment.mode;
+    if (effectiveMode === ServiceMode.ONLINE && dto.meeting_link && !dto.meeting_link.startsWith('https://meet.google.com')) {
+      throw new BadRequestException('Link Google Meet không hợp lệ');
+    }
+    if (effectiveMode !== ServiceMode.ONLINE && dto.meeting_link) {
+      throw new BadRequestException('Link Google Meet chỉ áp dụng cho mode ONLINE');
+    }
+
+    // Kiểm tra thời gian
     if (dto.start_time || dto.end_time) {
       const start = dto.start_time ? new Date(dto.start_time) : appointment.start_time;
       const end = dto.end_time ? new Date(dto.end_time) : appointment.end_time;
@@ -692,7 +791,6 @@ export class AppointmentService {
       if (isNaN(start.getTime()) || isNaN(end.getTime())) {
         throw new BadRequestException('Định dạng thời gian không hợp lệ');
       }
-
       if (start >= end) {
         throw new BadRequestException('Thời gian kết thúc phải sau thời gian bắt đầu');
       }
@@ -706,29 +804,78 @@ export class AppointmentService {
           appointment_id: { not: appointmentId },
         },
       });
-      if (overlapping) {
-        throw new BadRequestException('Thời gian trùng với lịch hẹn khác');
-      }
+      if (overlapping) throw new BadRequestException('Thời gian trùng với lịch hẹn khác');
     }
 
-    if (dto.service_id) {
-      const service = await this.prisma.service.findUnique({
-        where: { service_id: dto.service_id, deleted_at: null },
-      });
-      if (!service) {
-        throw new BadRequestException('Dịch vụ không tồn tại');
-      }
-    }
-
+    // Cập nhật lịch hẹn
     const updatedAppointment = await this.prisma.appointment.update({
       where: { appointment_id: appointmentId },
       data: {
         ...dto,
         start_time: dto.start_time ? new Date(dto.start_time) : undefined,
         end_time: dto.end_time ? new Date(dto.end_time) : undefined,
+        mode: dto.mode,
+        meeting_link: effectiveMode === ServiceMode.ONLINE ? dto.meeting_link : null,
+        location: effectiveMode === ServiceMode.ONLINE ? null : dto.location,
         updated_at: new Date(),
       },
     });
+
+    // Ghi log và thông báo
+    if (dto.mode || dto.meeting_link) {
+      await this.prisma.auditLog.create({
+        data: {
+          user_id: 'system', // Hoặc lấy userId từ request nếu có
+          action: 'UPDATE_APPOINTMENT',
+          entity_type: 'Appointment',
+          entity_id: appointmentId,
+          details: { mode: dto.mode, meeting_link: dto.meeting_link },
+        },
+      });
+
+      if (dto.meeting_link || dto.mode === ServiceMode.ONLINE) {
+        const emailContent = `Lịch hẹn tư vấn (mã ${appointmentId}) đã được cập nhật. ${effectiveMode === ServiceMode.ONLINE && updatedAppointment.meeting_link
+          ? `Tham gia qua Google Meet: ${updatedAppointment.meeting_link}`
+          : `Hình thức: ${effectiveMode}`
+          }`;
+        try {
+          await this.emailService.sendEmail(
+            appointment.user.email,
+            'Lịch hẹn tư vấn đã được cập nhật',
+            emailContent,
+          );
+          if (appointment.consultant) {
+            await this.emailService.sendEmail(
+              appointment.consultant.user.email,
+              'Lịch hẹn tư vấn đã được cập nhật',
+              emailContent,
+            );
+          }
+          await this.prisma.notification.create({
+            data: {
+              user_id: appointment.user_id,
+              type: NotificationType.Email,
+              title: 'Lịch hẹn tư vấn đã được cập nhật',
+              content: emailContent,
+              status: NotificationStatus.Pending,
+            },
+          });
+          if (appointment.consultant) {
+            await this.prisma.notification.create({
+              data: {
+                user_id: appointment.consultant.user_id,
+                type: NotificationType.Email,
+                title: 'Lịch hẹn tư vấn đã được cập nhật',
+                content: emailContent,
+                status: NotificationStatus.Pending,
+              },
+            });
+          }
+        } catch (error) {
+          this.logger.error(`Gửi email thất bại: ${error.message}`);
+        }
+      }
+    }
 
     return { appointment: updatedAppointment, message: 'Cập nhật lịch hẹn thành công' };
   }
@@ -987,7 +1134,7 @@ export class AppointmentService {
     this.logger.log(`Xem chi tiết lịch hẹn ${appointmentId} bởi ${userId}`);
     return {
       appointment,
-      feedbacks: appointment.feedback || [], // Sử dụng feedback từ include
+      feedbacks: appointment.feedback || [], 
       appointmentStatusHistory,
       message: 'Lấy chi tiết lịch hẹn thành công',
     };
@@ -1007,16 +1154,20 @@ export class AppointmentService {
   }
 
   async confirmAppointment(appointmentId: string, dto: ConfirmAppointmentDto, staffId: string) {
+    const { notes, meeting_link } = dto;
+
     const appointment = await this.prisma.appointment.findUnique({
       where: { appointment_id: appointmentId, deleted_at: null },
-      include: { test_result: true, schedule: true },
+      include: {
+        test_result: true,
+        schedule: true,
+        service: true,
+        user: { select: { email: true, full_name: true } },
+        consultant: { include: { user: { select: { email: true, full_name: true } } } },
+      },
     });
-    if (!appointment) {
-      throw new BadRequestException('Lịch hẹn không tồn tại');
-    }
-    if (appointment.status !== AppointmentStatus.Pending) {
-      throw new BadRequestException('Lịch hẹn không ở trạng thái Pending');
-    }
+    if (!appointment) throw new BadRequestException('Lịch hẹn không tồn tại');
+    if (appointment.status !== AppointmentStatus.Pending) throw new BadRequestException('Lịch hẹn không ở trạng thái Pending');
     if (appointment.payment_status !== 'Paid' && !appointment.is_free_consultation) {
       throw new BadRequestException('Lịch hẹn chưa được thanh toán');
     }
@@ -1024,20 +1175,89 @@ export class AppointmentService {
       throw new BadRequestException('Lịch hẹn tư vấn phải có lịch trống hợp lệ');
     }
 
+    // Kiểm tra meeting_link
+    if (appointment.mode === ServiceMode.ONLINE && !meeting_link) {
+      throw new BadRequestException('Link hội nghị trực tuyến là bắt buộc cho mode ONLINE');
+    }
+    if (appointment.mode !== ServiceMode.ONLINE && meeting_link) {
+      throw new BadRequestException('Link hội nghị trực tuyến chỉ áp dụng cho mode ONLINE');
+    }
+
     const updatedAppointment = await this.prisma.$transaction([
       this.prisma.appointment.update({
         where: { appointment_id: appointmentId },
-        data: { status: AppointmentStatus.Confirmed, updated_at: new Date() },
+        data: {
+          status: AppointmentStatus.Confirmed,
+          meeting_link: appointment.mode === ServiceMode.ONLINE ? meeting_link : null,
+          location: appointment.mode === ServiceMode.ONLINE ? null : appointment.location,
+          updated_at: new Date(),
+        },
       }),
       this.prisma.appointmentStatusHistory.create({
         data: {
           appointment_id: appointmentId,
           status: AppointmentStatus.Confirmed,
-          notes: dto.notes || 'Xác nhận lịch hẹn',
+          notes: notes || `Xác nhận lịch hẹn (${appointment.mode}${meeting_link ? `, link: ${meeting_link}` : ''})`,
           changed_by: staffId,
         },
       }),
+      this.prisma.auditLog.create({
+        data: {
+          user_id: staffId,
+          action: 'CONFIRM_APPOINTMENT',
+          entity_type: 'Appointment',
+          entity_id: appointmentId,
+          details: { status: AppointmentStatus.Confirmed, notes, meeting_link },
+        },
+      }),
+      ...(appointment.mode === ServiceMode.ONLINE
+        ? [
+          this.prisma.notification.create({
+            data: {
+              user_id: appointment.user_id,
+              type: NotificationType.Email,
+              title: 'Lịch hẹn tư vấn đã được xác nhận',
+              content: `Lịch hẹn của bạn (mã ${appointmentId}) đã được xác nhận. Tham gia qua link: ${meeting_link}`,
+              status: NotificationStatus.Pending,
+            },
+          }),
+          ...(appointment.consultant
+            ? [
+              this.prisma.notification.create({
+                data: {
+                  user_id: appointment.consultant.user_id,
+                  type: NotificationType.Email,
+                  title: 'Lịch hẹn tư vấn đã được xác nhận',
+                  content: `Lịch hẹn (mã ${appointmentId}) với khách hàng ${appointment.user.full_name} đã được xác nhận. Tham gia qua link: ${meeting_link}`,
+                  status: NotificationStatus.Pending,
+                },
+              }),
+            ]
+            : []),
+        ]
+        : []),
     ]);
+
+    // Gửi email thông báo
+    if (appointment.mode === ServiceMode.ONLINE) {
+      const emailContent = `Lịch hẹn tư vấn (mã ${appointmentId}) đã được xác nhận. Tham gia qua link: ${meeting_link}`;
+      try {
+        await this.emailService.sendEmail(
+          appointment.user.email,
+          'Lịch hẹn tư vấn đã được xác nhận',
+          emailContent,
+        );
+        if (appointment.consultant) {
+          await this.emailService.sendEmail(
+            appointment.consultant.user.email,
+            'Lịch hẹn tư vấn đã được xác nhận',
+            emailContent,
+          );
+        }
+      } catch (error) {
+        this.logger.error(`Gửi email thất bại: ${error.message}`);
+      }
+    }
 
     this.logger.log(`Xác nhận lịch hẹn ${appointmentId} bởi staff ${staffId}`);
     return {
@@ -1203,6 +1423,7 @@ export class AppointmentService {
         location: appt.location,
         mode: appt.mode,
         service: appt.service,
+        meeting_link: appt.meeting_link,
         consultant_name: appt.consultant?.user?.full_name || null,
         test_code: appt.test_result?.test_code || null,
         test_result_status: appt.test_result?.status || null,
@@ -1241,6 +1462,8 @@ export class AppointmentService {
         payment_status: appt.payment_status,
         location: appt.location,
         mode: appt.mode,
+        status: appt.status,
+        meeting_link: appt.meeting_link,
         user: {
           user_id: appt.user.user_id,
           full_name: appt.user.full_name,
@@ -1372,91 +1595,91 @@ export class AppointmentService {
   }
 
 
- async startConsultation(appointmentId: string, userId: string) {
-  const appointment = await this.prisma.appointment.findUnique({
-    where: { appointment_id: appointmentId, deleted_at: null },
-    include: {
-      consultant: { include: { user: { select: { full_name: true, email: true } } } },
-      user: { select: { email: true, full_name: true } },
-      service: { select: { name: true } },
-    },
-  });
-
-  if (!appointment) {
-    throw new BadRequestException('Lịch hẹn không tồn tại');
-  }
-  if (appointment.type !== 'Consultation') {
-    throw new BadRequestException('Chỉ áp dụng cho lịch hẹn tư vấn');
-  }
-  if (appointment.status !== AppointmentStatus.Confirmed) {
-    throw new BadRequestException('Lịch hẹn phải ở trạng thái Confirmed để bắt đầu');
-  }
-
-  const consultant = await this.prisma.consultantProfile.findUnique({
-    where: { user_id: userId },
-  });
-  if (!consultant || appointment.consultant_id !== consultant.consultant_id) {
-    throw new ForbiddenException('Bạn không có quyền bắt đầu buổi tư vấn này');
-  }
-
-  let notificationStatus: NotificationStatus = NotificationStatus.Pending;
-  try {
-    await this.emailService.sendEmail(
-      appointment.user.email,
-      'Buổi tư vấn đã bắt đầu',
-      `Buổi tư vấn của bạn (mã ${appointmentId}) với tư vấn viên ${appointment.consultant?.user.full_name || 'Không xác định'} cho dịch vụ ${appointment.service?.name || 'Không xác định'} đã bắt đầu vào ${new Date().toISOString()}.`,
-    );
-    notificationStatus = NotificationStatus.Sent;
-  } catch (error) {
-    this.logger.error(`Gửi email thất bại cho ${appointment.user.email}:`, error);
-    notificationStatus = NotificationStatus.Failed;
-  }
-
-  const updatedAppointment = await this.prisma.$transaction([
-    this.prisma.appointment.update({
-      where: { appointment_id: appointmentId },
-      data: {
-        status: AppointmentStatus.InProgress,
-        updated_at: new Date(),
+  async startConsultation(appointmentId: string, userId: string) {
+    const appointment = await this.prisma.appointment.findUnique({
+      where: { appointment_id: appointmentId, deleted_at: null },
+      include: {
+        consultant: { include: { user: { select: { full_name: true, email: true } } } },
+        user: { select: { email: true, full_name: true } },
+        service: { select: { name: true } },
       },
-    }),
-    this.prisma.appointmentStatusHistory.create({
-      data: {
-        appointment_id: appointmentId,
-        status: AppointmentStatus.InProgress,
-        notes: 'Buổi tư vấn đã bắt đầu',
-        changed_by: userId,
-        changed_at: new Date(), 
-      },
-    }),
-    this.prisma.notification.create({
-      data: {
-        user_id: appointment.user_id,
-        type: NotificationType.Email,
-        title: 'Buổi tư vấn đã bắt đầu',
-        content: `Buổi tư vấn của bạn với mã ${appointmentId} đã bắt đầu.`,
-        status: notificationStatus,
-      },
-    }),
-    this.prisma.auditLog.create({
-      data: {
-        user_id: userId,
-        action: 'START_CONSULTATION',
-        entity_type: 'Appointment',
-        entity_id: appointmentId,
-        details: { status: AppointmentStatus.InProgress },
-      },
-    }),
-  ]);
+    });
 
-  this.logger.log(`Buổi tư vấn ${appointmentId} đã bắt đầu bởi Consultant ${userId}`);
-  return {
-    appointment: updatedAppointment[0],
-    serviceName: appointment.service?.name || 'Không xác định',
-    consultantName: appointment.consultant?.user.full_name || 'Không xác định',
-    message: 'Bắt đầu buổi tư vấn thành công',
-  };
-}
+    if (!appointment) {
+      throw new BadRequestException('Lịch hẹn không tồn tại');
+    }
+    if (appointment.type !== 'Consultation') {
+      throw new BadRequestException('Chỉ áp dụng cho lịch hẹn tư vấn');
+    }
+    if (appointment.status !== AppointmentStatus.Confirmed) {
+      throw new BadRequestException('Lịch hẹn phải ở trạng thái Confirmed để bắt đầu');
+    }
+
+    const consultant = await this.prisma.consultantProfile.findUnique({
+      where: { user_id: userId },
+    });
+    if (!consultant || appointment.consultant_id !== consultant.consultant_id) {
+      throw new ForbiddenException('Bạn không có quyền bắt đầu buổi tư vấn này');
+    }
+
+    let notificationStatus: NotificationStatus = NotificationStatus.Pending;
+    try {
+      await this.emailService.sendEmail(
+        appointment.user.email,
+        'Buổi tư vấn đã bắt đầu',
+        `Buổi tư vấn của bạn (mã ${appointmentId}) với tư vấn viên ${appointment.consultant?.user.full_name || 'Không xác định'} cho dịch vụ ${appointment.service?.name || 'Không xác định'} đã bắt đầu vào ${new Date().toISOString()}.`,
+      );
+      notificationStatus = NotificationStatus.Sent;
+    } catch (error) {
+      this.logger.error(`Gửi email thất bại cho ${appointment.user.email}:`, error);
+      notificationStatus = NotificationStatus.Failed;
+    }
+
+    const updatedAppointment = await this.prisma.$transaction([
+      this.prisma.appointment.update({
+        where: { appointment_id: appointmentId },
+        data: {
+          status: AppointmentStatus.InProgress,
+          updated_at: new Date(),
+        },
+      }),
+      this.prisma.appointmentStatusHistory.create({
+        data: {
+          appointment_id: appointmentId,
+          status: AppointmentStatus.InProgress,
+          notes: 'Buổi tư vấn đã bắt đầu',
+          changed_by: userId,
+          changed_at: new Date(),
+        },
+      }),
+      this.prisma.notification.create({
+        data: {
+          user_id: appointment.user_id,
+          type: NotificationType.Email,
+          title: 'Buổi tư vấn đã bắt đầu',
+          content: `Buổi tư vấn của bạn với mã ${appointmentId} đã bắt đầu.`,
+          status: notificationStatus,
+        },
+      }),
+      this.prisma.auditLog.create({
+        data: {
+          user_id: userId,
+          action: 'START_CONSULTATION',
+          entity_type: 'Appointment',
+          entity_id: appointmentId,
+          details: { status: AppointmentStatus.InProgress },
+        },
+      }),
+    ]);
+
+    this.logger.log(`Buổi tư vấn ${appointmentId} đã bắt đầu bởi Consultant ${userId}`);
+    return {
+      appointment: updatedAppointment[0],
+      serviceName: appointment.service?.name || 'Không xác định',
+      consultantName: appointment.consultant?.user.full_name || 'Không xác định',
+      message: 'Bắt đầu buổi tư vấn thành công',
+    };
+  }
 
 
   async completeConsultation(appointmentId: string, dto: CompleteConsultationDto, userId: string) {
@@ -1579,6 +1802,7 @@ export class AppointmentService {
         payment_status: appt.payment_status,
         location: appt.location,
         mode: appt.mode,
+        meeting_link: appt.meeting_link,
         user: {
           user_id: appt.user.user_id,
           full_name: appt.user.full_name,

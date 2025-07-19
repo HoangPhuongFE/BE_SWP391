@@ -57,7 +57,7 @@ export class AppointmentService {
 
 
   async createAppointment(dto: CreateAppointmentDto & { userId: string }) {
-    const { consultant_id, schedule_id, service_id, type, location, userId, test_code, mode, meeting_link } = dto;
+    const { consultant_id, schedule_id, service_id, type, location, userId, test_code, mode } = dto;
 
     // Kiểm tra thời gian hợp lệ
     const now = new Date();
@@ -86,13 +86,7 @@ export class AppointmentService {
         : [];
     if (!availableModes.includes(mode as ServiceMode)) throw new BadRequestException('Hình thức tư vấn không được hỗ trợ bởi dịch vụ này');
 
-    // Kiểm tra meeting_link
-    if (mode === ServiceMode.ONLINE && meeting_link && !meeting_link.startsWith('https://meet.google.com')) {
-      throw new BadRequestException('Link Google Meet không hợp lệ');
-    }
-    if (mode !== ServiceMode.ONLINE && meeting_link) {
-      throw new BadRequestException('Link Google Meet chỉ áp dụng cho mode ONLINE');
-    }
+  
 
     // Kiểm tra consultant
     if (consultant_id) {
@@ -185,7 +179,6 @@ export class AppointmentService {
         is_free_consultation: isFreeConsultation,
         related_appointment_id,
         mode,
-        meeting_link: mode === ServiceMode.ONLINE ? meeting_link : null,
       },
     });
 
@@ -196,7 +189,7 @@ export class AppointmentService {
         status: 'Pending',
         notes: isFreeConsultation
           ? `Tạo lịch hẹn tư vấn miễn phí (${mode})`
-          : `Tạo lịch hẹn tư vấn (${mode}${meeting_link ? `, link: ${meeting_link}` : ''})`,
+          : `Tạo lịch hẹn tư vấn (${mode})`,
         changed_by: userId,
       },
     });
@@ -211,12 +204,12 @@ export class AppointmentService {
         action: 'CREATE_APPOINTMENT',
         entity_type: 'Appointment',
         entity_id: appt.appointment_id,
-        details: { mode, meeting_link, isFreeConsultation },
+        details: { mode, isFreeConsultation },
       },
     });
 
     // Gửi email thông báo
-    if (mode === ServiceMode.ONLINE && meeting_link) {
+    if (mode === ServiceMode.ONLINE ) {
       const user = await this.prisma.user.findUnique({ where: { user_id: userId }, select: { email: true, full_name: true } });
       const consultant = consultant_id
         ? await this.prisma.consultantProfile.findUnique({
@@ -225,7 +218,7 @@ export class AppointmentService {
         })
         : null;
 
-      const emailContent = `Lịch hẹn tư vấn của bạn (mã ${appt.appointment_id}) đã được tạo. Tham gia qua Google Meet: ${meeting_link}`;
+      const emailContent = `Lịch hẹn tư vấn của bạn (mã ${appt.appointment_id}) đã được tạo.`;
       try {
         if (user && user.email) {
           await this.emailService.sendEmail(user.email, 'Lịch hẹn tư vấn đã được tạo', emailContent);

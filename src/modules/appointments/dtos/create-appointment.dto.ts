@@ -56,12 +56,4 @@ Nếu không hợp lệ:
   })
   @IsEnum(ServiceMode)
   mode: ServiceMode;
-
-  @ApiPropertyOptional({
-    example: 'https://meet.google.com/xxx-xxxx-xxx',
-    description: 'Link hội nghị trực tuyến (tùy chọn, chỉ áp dụng khi mode là ONLINE). Phải là URL hợp lệ (ví dụ: Google Meet, Zoom, Microsoft Teams).',
-  })
-  @IsOptional()
-  @IsUrl()
-  meeting_link?: string;
 }

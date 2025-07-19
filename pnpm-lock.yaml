@@ -55,6 +55,9 @@ importers:
       '@prisma/client':
         specifier: ^6.10.0
         version: 6.10.0(prisma@6.10.0(typescript@5.8.3))(typescript@5.8.3)
+      axios:
+        specifier: ^1.10.0
+        version: 1.10.0
       bad-words:
         specifier: 3.0.4
         version: 3.0.4

@@ -66,668 +66,249 @@ export class AppointmentService {
 
 
   async createStiAppointment(dto: CreateStiAppointmentDto & { userId: string }) {
-  const {
-    serviceId,
-    date,
-    session,
-    location,
-    category = 'STI',
-    selected_mode,
-    userId,
-    contact_name,
-    contact_phone,
-    shipping_address,
-    province,
-    district,
-    ward,
-  } = dto;
+    const {
+      serviceId,
+      date,
+      session,
+      location,
+      category = 'STI',
+      selected_mode,
+      userId,
+      contact_name,
+      contact_phone,
+      shipping_address,
+      province,
+      district,
+      ward,
+    } = dto;
 
-  // Kiểm tra định dạng ngày
-  const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-  if (!dateRegex.test(date)) {
-    this.logger.warn(`Định dạng ngày không hợp lệ: date=${date}`);
-    throw new BadRequestException('Định dạng ngày phải là YYYY-MM-DD');
-  }
-
-  // Kiểm tra ngày hợp lệ và giới hạn thời gian
-  const now = new Date();
-  const appointmentDate = new Date(date);
-  if (isNaN(appointmentDate.getTime())) {
-    this.logger.warn(`Ngày không hợp lệ: date=${date}`);
-    throw new BadRequestException('Ngày không hợp lệ');
-  }
-  const maxDate = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000); // 2 tháng
-  if (appointmentDate.getFullYear() > now.getFullYear()) {
-    this.logger.warn(`Ngày vượt quá năm hiện tại: date=${date}`);
-    throw new BadRequestException('Không thể đặt lịch trước năm sau');
-  }
-  if (appointmentDate < now || appointmentDate > maxDate) {
-    this.logger.warn(`Ngày ngoài phạm vi cho phép: date=${date}, now=${now}, maxDate=${maxDate}`);
-    throw new BadRequestException('Lịch hẹn phải trong vòng 2 tháng từ hiện tại và không sớm hơn hôm nay');
-  }
-
-  // Kiểm tra dịch vụ
-  const svc = await this.prisma.service.findUnique({
-    where: { service_id: serviceId, deleted_at: null, is_active: true },
-    select: {
-      service_id: true,
-      name: true,
-      price: true,
-      type: true,
-      testing_hours: true,
-      daily_capacity: true,
-      available_modes: true,
-      return_address: true,
-      return_phone: true,
-    },
-  });
-  if (!svc || svc.type !== ServiceType.Testing || !svc.testing_hours || !svc.daily_capacity) {
-    this.logger.warn(`Dịch vụ không hợp lệ hoặc chưa cấu hình: serviceId=${serviceId}`);
-    throw new BadRequestException('Dịch vụ không hợp lệ hoặc chưa được cấu hình');
-  }
-
-  // Kiểm tra mode
-  const modes: ServiceMode[] = Array.isArray(svc.available_modes)
-    ? svc.available_modes
-    : typeof svc.available_modes === 'string'
-      ? JSON.parse(svc.available_modes)
-      : [];
-  if (!modes.includes(selected_mode as ServiceMode)) {
-    this.logger.warn(`Hình thức ${selected_mode} không được hỗ trợ bởi dịch vụ ${serviceId}`);
-    throw new BadRequestException('Dịch vụ không hỗ trợ hình thức đã chọn');
-  }
-
-  // Kiểm tra buổi
-  const testingHours = svc.testing_hours as Record<string, { start: string; end: string }>;
-  if (!testingHours[session]) {
-    this.logger.warn(`Buổi ${session} không được hỗ trợ bởi dịch vụ ${serviceId}`);
-    throw new BadRequestException(`Buổi ${session} không hỗ trợ`);
-  }
-
-  // Kiểm tra thông tin giao hàng nếu AT_HOME
-  let districtId = '';
-  let wardCode = '';
-  if (selected_mode === ServiceMode.AT_HOME) {
-    if (!contact_name || contact_name.length < 2 || contact_name.length > 100) {
-      this.logger.warn(`Tên liên hệ không hợp lệ: contact_name=${contact_name}`);
-      throw new BadRequestException('Tên liên hệ phải từ 2 đến 100 ký tự');
+    // Lấy thông tin user ngay từ đầu để sử dụng trong logging và thông báo
+    const user = await this.prisma.user.findUnique({
+      where: { user_id: userId },
+      select: { full_name: true, email: true, phone_number: true },
+    });
+    if (!user) {
+      this.logger.error(`Không tìm thấy người dùng: userId=${userId}`);
+      throw new BadRequestException('Người dùng không tồn tại');
     }
-    if (!contact_phone || !/^\d{10,11}$/.test(contact_phone)) {
-      this.logger.warn(`Số điện thoại không hợp lệ: contact_phone=${contact_phone}`);
-      throw new BadRequestException('Số điện thoại phải có 10-11 chữ số');
-    }
-    if (!shipping_address || shipping_address.length < 10 || shipping_address.length > 200) {
-      this.logger.warn(`Địa chỉ giao hàng không hợp lệ: shipping_address=${shipping_address}`);
-      throw new BadRequestException('Địa chỉ giao hàng phải từ 10 đến 200 ký tự');
-    }
-    if (!province || !district || !ward || province.length > 50 || district.length > 50 || ward.length > 50) {
-      this.logger.warn(`Thông tin địa chỉ không hợp lệ: province=${province}, district=${district}, ward=${ward}`);
-      throw new BadRequestException('Tỉnh, quận, phường phải hợp lệ và dưới 50 ký tự');
+    const username = user.full_name || 'Khách hàng'; // Fallback nếu full_name là null
+
+    // Kiểm tra định dạng ngày
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(date)) {
+      this.logger.error(`Định dạng ngày không hợp lệ: date=${date}, username=${username}, serviceId=${serviceId}`);
+      throw new BadRequestException('Định dạng ngày phải là YYYY-MM-DD');
     }
 
-    const districtKey = district.toLowerCase().trim();
-    districtId = this.districtMapping[districtKey];
-    if (!districtId) {
-      this.logger.warn(`Quận/huyện không hợp lệ: district=${district}`);
-      throw new BadRequestException('Quận/huyện không hợp lệ');
+    // Kiểm tra ngày hợp lệ và giới hạn thời gian
+    const now = new Date();
+    const appointmentDate = new Date(date);
+    if (isNaN(appointmentDate.getTime())) {
+      this.logger.error(`Ngày không hợp lệ: date=${date}, username=${username}, serviceId=${serviceId}`);
+      throw new BadRequestException('Ngày không hợp lệ');
+    }
+    const maxDate = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000); // 2 tháng
+    if (appointmentDate.getFullYear() > now.getFullYear()) {
+      this.logger.error(`Ngày vượt quá năm hiện tại: date=${date}, currentYear=${now.getFullYear()}, username=${username}, serviceId=${serviceId}`);
+      throw new BadRequestException('Không thể đặt lịch trước năm sau');
+    }
+    if (appointmentDate < now || appointmentDate > maxDate) {
+      this.logger.error(`Ngày ngoài phạm vi cho phép: date=${date}, now=${now.toISOString()}, maxDate=${maxDate.toISOString()}, username=${username}, serviceId=${serviceId}`);
+      throw new BadRequestException('Lịch hẹn phải trong vòng 2 tháng từ hiện tại và không sớm hơn hôm nay');
     }
 
-    const wardKey = ward.toLowerCase().trim();
-    wardCode = this.wardMapping[districtId]?.[wardKey];
-    if (!wardCode) {
-      this.logger.warn(`Phường/xã không hợp lệ: ward=${ward}`);
-      throw new BadRequestException('Phường/xã không hợp lệ');
-    }
-  }
-
-  // Kiểm tra giới hạn lịch hẹn mỗi ngày cho user
-  const startOfDay = new Date(appointmentDate.setHours(0, 0, 0, 0));
-  const endOfDay = new Date(appointmentDate.setHours(23, 59, 59, 999));
-  const userAppointments = await this.prisma.appointment.count({
-    where: {
-      user_id: userId,
-      start_time: { gte: startOfDay, lte: endOfDay },
-      status: { not: AppointmentStatus.Cancelled },
-      payment_status: PaymentStatus.Paid,
-      deleted_at: null,
-    },
-  });
-  if (userAppointments >= 2) {
-    this.logger.warn(`Người dùng đã đặt tối đa 2 lịch hẹn trong ngày: userId=${userId}, date=${startOfDay}`);
-    throw new BadRequestException('Bạn chỉ có thể đặt 2 lịch xét nghiệm mỗi ngày');
-  }
-
-  // Kiểm tra số lượng lịch hẹn chưa thanh toán
-  const pendingAppointments = await this.prisma.appointment.count({
-    where: {
-      user_id: userId,
-      service_id: serviceId,
-      payment_status: PaymentStatus.Pending,
-      status: { not: AppointmentStatus.Cancelled },
-      deleted_at: null,
-    },
-  });
-  if (pendingAppointments >= 3) {
-    this.logger.warn(`Quá nhiều lịch hẹn chưa thanh toán: userId=${userId}, serviceId=${serviceId}`);
-    throw new BadRequestException('Bạn có quá nhiều lịch hẹn chưa thanh toán cho dịch vụ này');
-  }
-
-  // Kiểm tra dung lượng ngày
-  const existingAppointments = await this.prisma.appointment.count({
-    where: {
-      service_id: serviceId,
-      start_time: { gte: startOfDay, lte: endOfDay },
-      status: { not: AppointmentStatus.Cancelled },
-      payment_status: PaymentStatus.Paid, // Chỉ tính lịch đã thanh toán
-    },
-  });
-  if (existingAppointments >= svc.daily_capacity) {
-    this.logger.warn(`Dung lượng ngày đã đầy: serviceId=${serviceId}, date=${startOfDay}`);
-    throw new BadRequestException('Dung lượng ngày đã đầy');
-  }
-
-  // Kiểm tra dung lượng buổi
-  const sessionCapacity = Math.floor(svc.daily_capacity / Object.keys(testingHours).length);
-  const sessionStartTime = new Date(startOfDay);
-  sessionStartTime.setHours(parseInt(testingHours[session].start.split(':')[0]), parseInt(testingHours[session].start.split(':')[1]));
-  const sessionEndTime = new Date(startOfDay);
-  sessionEndTime.setHours(parseInt(testingHours[session].end.split(':')[0]), parseInt(testingHours[session].end.split(':')[1]));
-  const sessionAppointments = await this.prisma.appointment.count({
-    where: {
-      service_id: serviceId,
-      start_time: { gte: sessionStartTime, lte: sessionEndTime },
-      status: { not: AppointmentStatus.Cancelled },
-      payment_status: PaymentStatus.Paid, // Chỉ tính lịch đã thanh toán
-    },
-  });
-  if (sessionAppointments >= sessionCapacity) {
-    this.logger.warn(`Buổi ${session} đã đầy: serviceId=${serviceId}, sessionStartTime=${sessionStartTime}`);
-    throw new BadRequestException(`Buổi ${session} đã đầy`);
-  }
-
-  // Kiểm tra trùng thời gian
-  const userOverlap = await this.prisma.appointment.findFirst({
-    where: {
-      user_id: userId,
-      service_id: serviceId,
-      start_time: { gte: startOfDay, lte: endOfDay },
-      status: { not: AppointmentStatus.Cancelled },
-      payment_status: PaymentStatus.Paid, // Chỉ tính lịch đã thanh toán
-      deleted_at: null,
-    },
-  });
-  if (userOverlap) {
-    this.logger.warn(`Trùng lịch hẹn: userId=${userId}, serviceId=${serviceId}, date=${startOfDay}`);
-    throw new BadRequestException('Bạn đã có lịch hẹn trong ngày này cho dịch vụ này');
-  }
-
-  // Tính giờ bắt đầu - kết thúc
-  const sessionHours = testingHours[session];
-  const startHour = parseInt(sessionHours.start.split(':')[0]);
-  const startMinute = parseInt(sessionHours.start.split(':')[1]);
-  const slotDuration = 30;
-  const slotStartMinutes = startMinute + sessionAppointments * slotDuration; // Dùng sessionAppointments thay vì existingAppointments
-  const startTime = new Date(appointmentDate);
-  startTime.setHours(startHour, slotStartMinutes, 0, 0);
-  const endTime = new Date(startTime);
-  endTime.setMinutes(startTime.getMinutes() + slotDuration);
-
-  // Kiểm tra thời gian
-  if (endTime > sessionEndTime) {
-    this.logger.warn(`Thời gian hẹn vượt khung giờ: endTime=${endTime}, sessionEndTime=${sessionEndTime}`);
-    throw new BadRequestException('Thời gian hẹn vượt quá khung giờ của buổi');
-  }
-
-  // Transaction: Tạo appointment, payment, test result, shipping info
-  let ghnOrder: any = null;
-  let shippingInfoId: string | null = null;
-  let orderCode: number | undefined;
-  const [appt, payment, testResult] = await this.prisma.$transaction(async (tx) => {
-    // Tạo appointment
-    const appt = await tx.appointment.create({
-      data: {
-        user_id: userId,
-        type: AppointmentType.Testing,
-        start_time: startTime,
-        end_time: endTime,
-        status: AppointmentStatus.Pending,
-        payment_status: PaymentStatus.Pending,
-        location: selected_mode === ServiceMode.AT_CLINIC ? location : null,
-        service_id: serviceId,
-        mode: selected_mode as ServiceMode,
+    // Kiểm tra dịch vụ
+    const svc = await this.prisma.service.findUnique({
+      where: { service_id: serviceId, deleted_at: null, is_active: true },
+      select: {
+        service_id: true,
+        name: true,
+        price: true,
+        type: true,
+        testing_hours: true,
+        daily_capacity: true,
+        available_modes: true,
+        return_address: true,
+        return_phone: true,
       },
     });
+    if (!svc || svc.type !== ServiceType.Testing || !svc.testing_hours || !svc.daily_capacity) {
+      this.logger.error(`Dịch vụ không hợp lệ hoặc chưa cấu hình: serviceId=${serviceId}, serviceName=${svc?.name || 'Unknown'}, username=${username}`);
+      throw new BadRequestException('Dịch vụ không hợp lệ hoặc chưa được cấu hình');
+    }
 
-    // Tạo orderCode duy nhất
-    for (let i = 0; i < 5; i++) {
-      const cand = Number(`${Date.now() % 100000}${Math.floor(Math.random() * 1000)}`.padStart(8, '0'));
-      if (!(await tx.payment.findUnique({ where: { order_code: cand } }))) {
-        orderCode = cand;
-        break;
+    // Kiểm tra mode
+    const modes: ServiceMode[] = Array.isArray(svc.available_modes)
+      ? svc.available_modes
+      : typeof svc.available_modes === 'string'
+        ? JSON.parse(svc.available_modes)
+        : [];
+    if (!modes.includes(selected_mode as ServiceMode)) {
+      this.logger.error(`Hình thức không được hỗ trợ: selected_mode=${selected_mode}, available_modes=${JSON.stringify(modes)}, serviceName=${svc.name}, username=${username}`);
+      throw new BadRequestException('Dịch vụ không hỗ trợ hình thức đã chọn');
+    }
+
+    // Kiểm tra buổi
+    const testingHours = svc.testing_hours as Record<string, { start: string; end: string }>;
+    if (!testingHours[session]) {
+      this.logger.error(`Buổi không được hỗ trợ: session=${session}, testing_hours=${JSON.stringify(testingHours)}, serviceName=${svc.name}, username=${username}`);
+      throw new BadRequestException(`Buổi ${session} không hỗ trợ`);
+    }
+
+    // Kiểm tra thông tin giao hàng nếu AT_HOME
+    let districtId = '';
+    let wardCode = '';
+    if (selected_mode === ServiceMode.AT_HOME) {
+      if (!contact_name || contact_name.length < 2 || contact_name.length > 100) {
+        this.logger.error(`Tên liên hệ không hợp lệ: contact_name=${contact_name}, length=${contact_name?.length}, username=${username}, serviceName=${svc.name}`);
+        throw new BadRequestException('Tên liên hệ phải từ 2 đến 100 ký tự');
+      }
+      if (!contact_phone || !/^\d{10,11}$/.test(contact_phone)) {
+        this.logger.error(`Số điện thoại không hợp lệ: contact_phone=${contact_phone}, username=${username}, serviceName=${svc.name}`);
+        throw new BadRequestException('Số điện thoại phải có 10-11 chữ số');
+      }
+      if (!shipping_address || shipping_address.length < 10 || shipping_address.length > 200) {
+        this.logger.error(`Địa chỉ giao hàng không hợp lệ: shipping_address=${shipping_address}, length=${shipping_address?.length}, username=${username}, serviceName=${svc.name}`);
+        throw new BadRequestException('Địa chỉ giao hàng phải từ 10 đến 200 ký tự');
+      }
+      if (!province || !district || !ward || province.length > 50 || district.length > 50 || ward.length > 50) {
+        this.logger.error(`Thông tin địa chỉ không hợp lệ: province=${province}, district=${district}, ward=${ward}, username=${username}, serviceName=${svc.name}`);
+        throw new BadRequestException('Tỉnh, quận, phường phải hợp lệ và dưới 50 ký tự');
+      }
+
+      const districtKey = district.toLowerCase().trim();
+      districtId = this.districtMapping[districtKey];
+      if (!districtId) {
+        this.logger.error(`Quận/huyện không hợp lệ: district=${district}, username=${username}, serviceName=${svc.name}`);
+        throw new BadRequestException('Quận/huyện không hợp lệ');
+      }
+
+      const wardKey = ward.toLowerCase().trim();
+      wardCode = this.wardMapping[districtId]?.[wardKey];
+      if (!wardCode) {
+        this.logger.error(`Phường/xã không hợp lệ: ward=${ward}, districtId=${districtId}, username=${username}, serviceName=${svc.name}`);
+        throw new BadRequestException('Phường/xã không hợp lệ');
       }
     }
-    if (!orderCode) {
-      this.logger.error(`Không thể tạo orderCode cho appointment: ${appt.appointment_id}`);
-      throw new BadRequestException('Tạo mã thanh toán thất bại');
-    }
 
-    // Tạo payment
-    const payment = await tx.payment.create({
-      data: {
-        appointment_id: appt.appointment_id,
+    // Kiểm tra giới hạn lịch hẹn mỗi ngày cho user
+    const startOfDay = new Date(appointmentDate.setHours(0, 0, 0, 0));
+    const endOfDay = new Date(appointmentDate.setHours(23, 59, 59, 999));
+    const userAppointments = await this.prisma.appointment.count({
+      where: {
         user_id: userId,
-        amount: Number(svc.price),
-        payment_method: PaymentMethod.BankCard,
-        status: PaymentTransactionStatus.Pending,
-        order_code: orderCode,
-        expires_at: new Date(Date.now() + 30 * 60 * 1000),
+        start_time: { gte: startOfDay, lte: endOfDay },
+        status: { not: AppointmentStatus.Cancelled },
+        payment_status: PaymentStatus.Paid,
+        deleted_at: null,
       },
     });
+    if (userAppointments >= 2) {
+      this.logger.error(`Người dùng đã đặt tối đa 2 lịch hẹn trong ngày: username=${username}, date=${startOfDay.toISOString()}, serviceName=${svc.name}, appointmentCount=${userAppointments}`);
+      throw new BadRequestException('Bạn chỉ có thể đặt 2 lịch xét nghiệm mỗi ngày');
+    }
 
-    // Tạo test result
-    const testResult = await tx.testResult.create({
-      data: {
-        appointment_id: appt.appointment_id,
+    // Kiểm tra số lượng lịch hẹn chưa thanh toán
+    const pendingAppointments = await this.prisma.appointment.count({
+      where: {
+        user_id: userId,
         service_id: serviceId,
-        result_data: 'Pending',
-        status: TestResultStatus.Pending,
-        test_code: await this.generateUniqueTestCode(category),
+        payment_status: PaymentStatus.Pending,
+        status: { not: AppointmentStatus.Cancelled },
+        deleted_at: null,
       },
     });
-
-    // Tạo shipping info nếu AT_HOME
-    if (selected_mode === ServiceMode.AT_HOME) {
-      const shippingInfo = await tx.shippingInfo.create({
-        data: {
-          appointment_id: appt.appointment_id,
-          provider: 'GHN',
-          shipping_status: ShippingStatus.Pending,
-          contact_name: contact_name!,
-          contact_phone: contact_phone!,
-          shipping_address: shipping_address!,
-          province: province!,
-          district: districtId!,
-          ward: wardCode!,
-        },
-      });
-      shippingInfoId = shippingInfo.id;
+    if (pendingAppointments >= 3) {
+      this.logger.error(`Quá nhiều lịch hẹn chưa thanh toán: username=${username}, serviceName=${svc.name}, pendingCount=${pendingAppointments}`);
+      throw new BadRequestException('Bạn có quá nhiều lịch hẹn chưa thanh toán cho dịch vụ này');
     }
 
-    // Ghi lịch sử trạng thái
-    await tx.appointmentStatusHistory.create({
-      data: {
-        appointment_id: appt.appointment_id,
-        status: AppointmentStatus.Pending,
-        notes: 'Tạo lịch hẹn xét nghiệm',
-        changed_by: userId,
+    // Kiểm tra dung lượng ngày
+    const existingAppointments = await this.prisma.appointment.count({
+      where: {
+        service_id: serviceId,
+        start_time: { gte: startOfDay, lte: endOfDay },
+        status: { not: AppointmentStatus.Cancelled },
+        payment_status: PaymentStatus.Paid,
       },
     });
-
-    await tx.testResultStatusHistory.create({
-      data: {
-        result_id: testResult.result_id,
-        status: TestResultStatus.Pending,
-        notes: 'Kết quả khởi tạo',
-        changed_by: userId,
-      },
-    });
-
-    return [appt, payment, testResult];
-  });
-
-  // Tạo payment link
-  const user = await this.prisma.user.findUnique({
-    where: { user_id: userId },
-    select: { email: true, full_name: true, phone_number: true },
-  });
-  if (!user) {
-    this.logger.error(`Không tìm thấy user: userId=${userId}`);
-    throw new BadRequestException('Người dùng không tồn tại');
-  }
-
-  const payDto: CreatePaymentDto = {
-    orderCode: orderCode!,
-    amount: Number(svc.price),
-    description: `XN ${svc.name}`.substring(0, 25),
-    cancelUrl: `${process.env.FRONTEND_URL_LOCAL}/cancel`,
-    returnUrl: `${process.env.FRONTEND_URL_LOCAL}/success`,
-    buyerName: user.full_name || userId,
-    buyerEmail: user.email,
-    buyerPhone: user.phone_number ?? undefined,
-    paymentMethod: PaymentMethod.BankCard,
-    appointmentId: appt.appointment_id,
-  };
-  let paymentLink: string;
-  try {
-    const result = await this.paymentService.createPaymentLink(userId, payDto);
-    paymentLink = result.paymentLink;
-  } catch (error) {
-    this.logger.error(`Tạo liên kết thanh toán thất bại cho appointment: ${appt.appointment_id}, error: ${error.message}`);
-    throw new BadRequestException('Tạo liên kết thanh toán thất bại');
-  }
-
-  // Tạo đơn GHN nếu AT_HOME
-  if (selected_mode === ServiceMode.AT_HOME && shippingInfoId) {
-    try {
-      ghnOrder = await this.shippingService.createOrderForAppointment(appt.appointment_id);
-      await this.prisma.shippingInfo.update({
-        where: { id: shippingInfoId },
-        data: {
-          provider_order_code: ghnOrder.order_code,
-          shipping_status: ShippingStatus.Shipped,
-          expected_delivery_time: ghnOrder.expected_delivery_time ? new Date(ghnOrder.expected_delivery_time) : undefined,
-          label_url: ghnOrder.label || null,
-        },
-      });
-    } catch (error) {
-      this.logger.error(`Lỗi tạo đơn GHN cho appointment: ${appt.appointment_id}, error: ${error.message}`);
-      // Log lỗi nhưng không ném lỗi
+    if (existingAppointments >= svc.daily_capacity) {
+      this.logger.error(`Dung lượng ngày đã đầy: serviceName=${svc.name}, date=${startOfDay.toISOString()}, daily_capacity=${svc.daily_capacity}, appointmentCount=${existingAppointments}`);
+      throw new BadRequestException('Dung lượng ngày đã đầy');
     }
-  }
 
-  // Gửi thông báo
-  const emailContent = `Lịch hẹn xét nghiệm của bạn (mã ${appt.appointment_id}) đã được tạo. Mã xét nghiệm: ${testResult.test_code}. Vui lòng thanh toán trong 30 phút để xác nhận.${
-    ghnOrder ? ` Mã đơn GHN: ${ghnOrder.order_code}.` : ''
-  }`;
-  try {
-    if (user.email) {
-      await this.emailService.sendEmail(user.email, 'Đặt lịch xét nghiệm thành công', emailContent);
-      await this.prisma.notification.create({
+    // Kiểm tra dung lượng buổi
+    const sessionCapacity = Math.floor(svc.daily_capacity / Object.keys(testingHours).length);
+    const sessionStartTime = new Date(startOfDay);
+    sessionStartTime.setHours(parseInt(testingHours[session].start.split(':')[0]), parseInt(testingHours[session].start.split(':')[1]));
+    const sessionEndTime = new Date(startOfDay);
+    sessionEndTime.setHours(parseInt(testingHours[session].end.split(':')[0]), parseInt(testingHours[session].end.split(':')[1]));
+    const sessionAppointments = await this.prisma.appointment.count({
+      where: {
+        service_id: serviceId,
+        start_time: { gte: sessionStartTime, lte: sessionEndTime },
+        status: { not: AppointmentStatus.Cancelled },
+        payment_status: PaymentStatus.Paid,
+      },
+    });
+    if (sessionAppointments >= sessionCapacity) {
+      this.logger.error(`Buổi đã đầy: serviceName=${svc.name}, session=${session}, sessionStartTime=${sessionStartTime.toISOString()}, sessionCapacity=${sessionCapacity}, appointmentCount=${sessionAppointments}`);
+      throw new BadRequestException(`Buổi ${session} đã đầy`);
+    }
+
+    // Kiểm tra trùng thời gian
+    const userOverlap = await this.prisma.appointment.findFirst({
+      where: {
+        user_id: userId,
+        service_id: serviceId,
+        start_time: { gte: startOfDay, lte: endOfDay },
+        status: { not: AppointmentStatus.Cancelled },
+        payment_status: PaymentStatus.Paid,
+        deleted_at: null,
+      },
+    });
+    if (userOverlap) {
+      this.logger.error(`Trùng lịch hẹn: username=${username}, serviceName=${svc.name}, date=${startOfDay.toISOString()}, existingAppointmentId=${userOverlap.appointment_id}`);
+      throw new BadRequestException('Bạn đã có lịch hẹn trong ngày này cho dịch vụ này');
+    }
+
+    // Tính giờ bắt đầu - kết thúc
+    const sessionHours = testingHours[session];
+    const startHour = parseInt(sessionHours.start.split(':')[0]);
+    const startMinute = parseInt(sessionHours.start.split(':')[1]);
+    const slotDuration = 30;
+    const slotStartMinutes = startMinute + sessionAppointments * slotDuration;
+    const startTime = new Date(appointmentDate);
+    startTime.setHours(startHour, slotStartMinutes, 0, 0);
+    const endTime = new Date(startTime);
+    endTime.setMinutes(startTime.getMinutes() + slotDuration);
+
+    // Kiểm tra thời gian
+    if (endTime > sessionEndTime) {
+      this.logger.error(`Thời gian hẹn vượt khung giờ: endTime=${endTime.toISOString()}, sessionEndTime=${sessionEndTime.toISOString()}, serviceName=${svc.name}, username=${username}`);
+      throw new BadRequestException('Thời gian hẹn vượt quá khung giờ của buổi');
+    }
+
+    // Transaction: Tạo appointment, payment, test result, shipping info, notifications
+    let ghnOrder: any = null;
+    let shippingInfoId: string | null = null;
+    let orderCode: number | undefined;
+    const [appt, payment, testResult] = await this.prisma.$transaction(async (tx) => {
+      // Tạo appointment
+      const appt = await tx.appointment.create({
         data: {
           user_id: userId,
-          type: NotificationType.Email,
-          title: 'Đặt lịch xét nghiệm thành công',
-          content: emailContent,
-          status: NotificationStatus.Pending,
+          type: AppointmentType.Testing,
+          start_time: startTime,
+          end_time: endTime,
+          status: AppointmentStatus.Pending,
+          payment_status: PaymentStatus.Pending,
+          location: selected_mode === ServiceMode.AT_CLINIC ? location : null,
+          service_id: serviceId,
+          mode: selected_mode as ServiceMode,
         },
       });
-    }
-    await this.prisma.notification.create({
-      data: {
-        user_id: userId,
-        type: NotificationType.Email,
-        title: 'Hướng dẫn chuẩn bị xét nghiệm STI',
-        content: `Để đảm bảo kết quả xét nghiệm chính xác, vui lòng nhịn ăn 4-6 giờ trước khi lấy mẫu (nếu tại phòng khám) hoặc chuẩn bị mẫu theo hướng dẫn trong bộ xét nghiệm tại nhà.`,
-        status: NotificationStatus.Pending,
-      },
-    });
-  } catch (error) {
-    this.logger.error(`Gửi email thất bại cho appointment: ${appt.appointment_id}, error: ${error.message}`);
-  }
 
-  this.logger.log(`Tạo lịch xét nghiệm thành công: appointment_id=${appt.appointment_id}, userId=${userId}`);
-  return {
-    appointment: appt,
-    paymentLink,
-    orderCode,
-    testCode: testResult.test_code,
-    ghnOrderCode: ghnOrder?.order_code || null,
-    message: 'Đặt lịch xét nghiệm thành công',
-    return_address: svc.return_address,
-    return_phone: svc.return_phone,
-    preparationGuide: 'Nhịn ăn 4-6 giờ trước khi lấy mẫu (tại phòng khám) hoặc làm theo hướng dẫn bộ xét nghiệm tại nhà.',
-  };
-}
-
-
-
-
-  async createAppointment(dto: CreateAppointmentDto & { userId: string }) {
-  const { consultant_id, schedule_id, service_id, type, location, userId, test_code, mode } = dto;
-
-  // Kiểm tra dịch vụ
-  const svc = await this.prisma.service.findUnique({
-    where: { service_id, deleted_at: null, is_active: true },
-    select: { service_id: true, name: true, price: true, type: true, available_modes: true },
-  });
-  if (!svc || svc.type !== ServiceType.Consultation) {
-    this.logger.warn(`Dịch vụ không hợp lệ hoặc không hoạt động: service_id=${service_id}`);
-    throw new BadRequestException('Dịch vụ không hợp lệ hoặc không hoạt động');
-  }
-
-  // Kiểm tra mode
-  const availableModes: ServiceMode[] = Array.isArray(svc.available_modes)
-    ? svc.available_modes
-    : typeof svc.available_modes === 'string'
-      ? JSON.parse(svc.available_modes)
-      : [];
-  if (!availableModes.includes(mode as ServiceMode)) {
-    this.logger.warn(`Hình thức ${mode} không được hỗ trợ bởi dịch vụ ${service_id}`);
-    throw new BadRequestException('Hình thức tư vấn không được hỗ trợ bởi dịch vụ này');
-  }
-
-  // Kiểm tra lịch trình
-  const schedule = await this.prisma.schedule.findUnique({
-    where: { schedule_id, is_booked: false, deleted_at: null },
-    select: {
-      schedule_id: true,
-      consultant_id: true,
-      start_time: true,
-      end_time: true,
-      max_appointments_per_day: true,
-      consultant: {
-        select: {
-          is_verified: true,
-          specialization: true,
-          user: { select: { user_id: true, email: true, full_name: true } }, 
-        },
-      },
-    },
-  });
-  if (!schedule) {
-    this.logger.warn(`Lịch trống không tồn tại hoặc đã được đặt: schedule_id=${schedule_id}`);
-    throw new BadRequestException('Lịch trống không tồn tại hoặc đã được đặt');
-  }
-
-  // Kiểm tra consultant
-  if (consultant_id && consultant_id !== schedule.consultant_id) {
-    this.logger.warn(`Consultant không khớp với lịch trình: consultant_id=${consultant_id}, schedule_id=${schedule_id}`);
-    throw new BadRequestException('Consultant không hợp lệ cho lịch trình này');
-  }
-  if (!schedule.consultant.is_verified) {
-    this.logger.warn(`Consultant chưa được xác minh: consultant_id=${consultant_id}`);
-    throw new BadRequestException('Consultant chưa được xác minh');
-  }
-
-  // Kiểm tra thời gian hợp lệ
-  const now = new Date();
-  const maxDate = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000); 
-  if (schedule.start_time.getFullYear() > now.getFullYear()) {
-    this.logger.warn(`Ngày đặt lịch vượt quá năm hiện tại: start_time=${schedule.start_time}`);
-    throw new BadRequestException('Không thể đặt lịch trước năm sau');
-  }
-  if (schedule.start_time < now || schedule.start_time > maxDate) {
-    this.logger.warn(`Thời gian lịch hẹn không hợp lệ: start_time=${schedule.start_time}, maxDate=${maxDate}`);
-    throw new BadRequestException('Lịch hẹn phải trong vòng 2 tháng từ hiện tại và không sớm hơn hôm nay');
-  }
-
-  // Kiểm tra giới hạn lịch hẹn mỗi ngày cho user
-  const startOfDay = new Date(schedule.start_time);
-  startOfDay.setHours(0, 0, 0, 0);
-  const endOfDay = new Date(schedule.start_time);
-  endOfDay.setHours(23, 59, 59, 999);
-  const userAppointments = await this.prisma.appointment.count({
-    where: {
-      user_id: userId,
-      start_time: { gte: startOfDay, lte: endOfDay },
-      status: { not: AppointmentStatus.Cancelled },
-      payment_status: PaymentStatus.Paid,
-      deleted_at: null,
-    },
-  });
-  if (userAppointments >= 2) {
-    this.logger.warn(`Người dùng đã đặt tối đa 2 lịch hẹn trong ngày: userId=${userId}, date=${startOfDay}`);
-    throw new BadRequestException('Bạn chỉ có thể đặt tối đa 2 lịch hẹn mỗi ngày');
-  }
-
-  // Kiểm tra giới hạn lịch hẹn của consultant
-  const consultantAppointments = await this.prisma.appointment.count({
-    where: {
-      consultant_id: schedule.consultant_id,
-      start_time: { gte: startOfDay, lte: endOfDay },
-      status: { not: AppointmentStatus.Cancelled },
-      payment_status: PaymentStatus.Paid,
-      deleted_at: null,
-    },
-  });
-  const maxAppointments = schedule.max_appointments_per_day ?? 5;
-  if (consultantAppointments >= maxAppointments) {
-    this.logger.warn(`Consultant đã đầy lịch hẹn trong ngày: consultant_id=${schedule.consultant_id}, date=${startOfDay}`);
-    throw new BadRequestException('Consultant đã đầy lịch hẹn trong ngày này');
-  }
-
-  // Kiểm tra trùng lịch của consultant
-  const consultantOverlap = await this.prisma.appointment.findFirst({
-    where: {
-      consultant_id: schedule.consultant_id,
-      start_time: { lte: schedule.end_time },
-      end_time: { gte: schedule.start_time },
-      status: { not: AppointmentStatus.Cancelled },
-      payment_status: PaymentStatus.Paid,
-      deleted_at: null,
-    },
-  });
-  if (consultantOverlap) {
-    this.logger.warn(`Trùng lịch consultant: consultant_id=${schedule.consultant_id}, time=${schedule.start_time}`);
-    throw new BadRequestException('Thời gian trùng với lịch hẹn khác của consultant');
-  }
-
-  // Kiểm tra trùng lịch của user
-  const userOverlap = await this.prisma.appointment.findFirst({
-    where: {
-      user_id: userId,
-      service_id,
-      start_time: { lte: schedule.end_time },
-      end_time: { gte: schedule.start_time },
-      status: { not: AppointmentStatus.Cancelled },
-      payment_status: PaymentStatus.Paid,
-      deleted_at: null,
-    },
-  });
-  if (userOverlap) {
-    this.logger.warn(`Trùng lịch user: userId=${userId}, service_id=${service_id}, time=${schedule.start_time}`);
-    throw new BadRequestException('Bạn đã có lịch hẹn trùng thời gian cho dịch vụ này');
-  }
-
-  // Kiểm tra số lượng lịch hẹn chưa thanh toán
-  const pendingAppointments = await this.prisma.appointment.count({
-    where: {
-      user_id: userId,
-      service_id,
-      payment_status: PaymentStatus.Pending,
-      status: { not: AppointmentStatus.Cancelled },
-      deleted_at: null,
-    },
-  });
-  if (pendingAppointments >= 3) {
-    this.logger.warn(`Quá nhiều lịch hẹn chưa thanh toán: userId=${userId}, service_id=${service_id}`);
-    throw new BadRequestException('Bạn có quá nhiều lịch hẹn chưa thanh toán cho dịch vụ này');
-  }
-
-  // Kiểm tra tư vấn miễn phí với test_code
-  let isFreeConsultation = false;
-  let paymentAmount = Number(svc.price);
-  let related_appointment_id: string | undefined;
-  if (test_code) {
-    const testResult = await this.prisma.testResult.findUnique({
-      where: { test_code },
-      include: {
-        appointment: {
-          select: {
-            appointment_id: true, 
-            user_id: true,
-            type: true,
-            status: true,
-            deleted_at: true,
-            free_consultation_valid_until: true,
-          },
-        },
-      },
-    });
-    if (!testResult || !testResult.appointment) {
-      this.logger.warn(`Mã xét nghiệm không hợp lệ: test_code=${test_code}`);
-      throw new BadRequestException('Mã xét nghiệm không hợp lệ');
-    }
-    const relatedAppt = testResult.appointment;
-    if (
-      relatedAppt.user_id === userId &&
-      relatedAppt.type === AppointmentType.Testing &&
-      relatedAppt.status === AppointmentStatus.Completed &&
-      !relatedAppt.deleted_at &&
-      relatedAppt.free_consultation_valid_until &&
-      new Date() <= relatedAppt.free_consultation_valid_until
-    ) {
-      const freeConsults = await this.prisma.appointment.count({
-        where: { related_appointment_id: relatedAppt.appointment_id, is_free_consultation: true, deleted_at: null },
-      });
-      if (freeConsults < 1) {
-        isFreeConsultation = true;
-        paymentAmount = 0;
-        related_appointment_id = relatedAppt.appointment_id;
-      } else {
-        this.logger.warn(`Mã xét nghiệm đã được sử dụng cho tư vấn miễn phí: test_code=${test_code}`);
-        throw new BadRequestException('Mã xét nghiệm đã được sử dụng cho tư vấn miễn phí');
-      }
-    } else {
-      this.logger.warn(`Mã xét nghiệm không hợp lệ hoặc hết hạn: test_code=${test_code}`);
-      throw new BadRequestException('Mã xét nghiệm không hợp lệ hoặc đã hết hạn miễn phí');
-    }
-  }
-
-  // Transaction: Tạo appointment và các bản ghi liên quan
-  return this.prisma.$transaction(async (tx) => {
-    // Tạo appointment
-    const appt = await tx.appointment.create({
-      data: {
-        user_id: userId,
-        consultant_id,
-        type: AppointmentType.Consultation,
-        start_time: schedule.start_time,
-        end_time: schedule.end_time,
-        status: AppointmentStatus.Pending,
-        payment_status: isFreeConsultation ? PaymentStatus.Paid : PaymentStatus.Pending,
-        location: mode === ServiceMode.ONLINE ? null : location,
-        service_id,
-        schedule_id,
-        is_free_consultation: isFreeConsultation,
-        related_appointment_id,
-        mode,
-      },
-    });
-
-    // Đặt is_booked: true chỉ khi tư vấn miễn phí
-    if (isFreeConsultation) {
-      await tx.schedule.update({
-        where: { schedule_id },
-        data: { is_booked: true },
-      });
-    }
-
-    // Ghi lịch sử trạng thái
-    await tx.appointmentStatusHistory.create({
-      data: {
-        appointment_id: appt.appointment_id,
-        status: AppointmentStatus.Pending,
-        notes: isFreeConsultation ? `Tạo lịch hẹn tư vấn miễn phí (${mode})` : `Tạo lịch hẹn tư vấn (${mode})`,
-        changed_by: userId,
-      },
-    });
-
-    // Ghi audit log
-    await tx.auditLog.create({
-      data: {
-        user_id: userId,
-        action: 'CREATE_APPOINTMENT',
-        entity_type: 'Appointment',
-        entity_id: appt.appointment_id,
-        details: { mode, isFreeConsultation, service_id, consultant_id },
-      },
-    });
-
-    // Tạo payment nếu không miễn phí
-    let paymentLink: string | undefined;
-    let orderCode: number | undefined;
-    if (!isFreeConsultation) {
       // Tạo orderCode duy nhất
       for (let i = 0; i < 5; i++) {
         const cand = Number(`${Date.now() % 100000}${Math.floor(Math.random() * 1000)}`.padStart(8, '0'));
@@ -737,16 +318,16 @@ export class AppointmentService {
         }
       }
       if (!orderCode) {
-        this.logger.error(`Không thể tạo orderCode cho appointment: ${appt.appointment_id}`);
+        this.logger.error(`Không thể tạo orderCode: username=${username}, serviceName=${svc.name}, appointmentId=${appt.appointment_id}`);
         throw new BadRequestException('Tạo mã thanh toán thất bại');
       }
 
-      // Tạo bản ghi Payment
-      await tx.payment.create({
+      // Tạo payment
+      const payment = await tx.payment.create({
         data: {
           appointment_id: appt.appointment_id,
           user_id: userId,
-          amount: paymentAmount,
+          amount: Number(svc.price),
           payment_method: PaymentMethod.BankCard,
           status: PaymentTransactionStatus.Pending,
           order_code: orderCode,
@@ -754,89 +335,519 @@ export class AppointmentService {
         },
       });
 
-      // Lấy thông tin user để tạo payment link
-      const user = await tx.user.findUnique({
-        where: { user_id: userId },
-        select: { email: true, full_name: true, phone_number: true },
+      // Tạo test result
+      const testResult = await tx.testResult.create({
+        data: {
+          appointment_id: appt.appointment_id,
+          service_id: serviceId,
+          result_data: 'Pending',
+          status: TestResultStatus.Pending,
+          test_code: await this.generateUniqueTestCode(category),
+        },
       });
-      if (!user) {
-        this.logger.error(`Không tìm thấy user: userId=${userId}`);
-        throw new BadRequestException('Người dùng không tồn tại');
+
+      // Tạo shipping info nếu AT_HOME
+      if (selected_mode === ServiceMode.AT_HOME) {
+        const shippingInfo = await tx.shippingInfo.create({
+          data: {
+            appointment_id: appt.appointment_id,
+            provider: 'GHN',
+            shipping_status: ShippingStatus.Pending,
+            contact_name: contact_name!,
+            contact_phone: contact_phone!,
+            shipping_address: shipping_address!,
+            province: province!,
+            district: districtId!,
+            ward: wardCode!,
+          },
+        });
+        shippingInfoId = shippingInfo.id;
       }
 
-      // Tạo payment link với PayOS
-      const payDto: CreatePaymentDto = {
-        orderCode,
-        amount: paymentAmount,
-        description: `Hẹn ${svc.name}`.substring(0, 25),
-        cancelUrl: `${process.env.FRONTEND_URL_LOCAL}`,
-        returnUrl: `${process.env.FRONTEND_URL_LOCAL}`,
-        buyerName: user.full_name || userId,
-        buyerEmail: user.email,
-        buyerPhone: user.phone_number ?? undefined, 
-        paymentMethod: PaymentMethod.BankCard,
-        appointmentId: appt.appointment_id,
-      };
+      // Ghi lịch sử trạng thái
+      await tx.appointmentStatusHistory.create({
+        data: {
+          appointment_id: appt.appointment_id,
+          status: AppointmentStatus.Pending,
+          notes: 'Tạo lịch hẹn xét nghiệm',
+          changed_by: userId,
+        },
+      });
+
+      await tx.testResultStatusHistory.create({
+        data: {
+          result_id: testResult.result_id,
+          status: TestResultStatus.Pending,
+          notes: 'Kết quả khởi tạo',
+          changed_by: userId,
+        },
+      });
+
+      // Gửi thông báo trong transaction
+      const startTimeFormatted = startTime.toLocaleString('vi-VN', {
+        dateStyle: 'short',
+        timeStyle: 'short',
+      });
+      const locationInfo = selected_mode === ServiceMode.AT_CLINIC ? ` tại ${location}` : selected_mode === ServiceMode.AT_HOME ? ` tại nhà (địa chỉ: ${shipping_address}, ${ward}, ${district}, ${province})` : '';
+      const emailContent = `Chào ${user.full_name || 'Khách hàng'},
+Lịch hẹn xét nghiệm "${svc.name}" của bạn vào ${startTimeFormatted}, buổi ${session}${locationInfo} đã được tạo.
+Mã xét nghiệm: ${testResult.test_code}.
+${ghnOrder ? `Mã đơn vận chuyển: ${ghnOrder.order_code}.` : ''}
+Vui lòng thanh toán trong 30 phút để xác nhận lịch hẹn.`;
 
       try {
-        const result = await this.paymentService.createPaymentLink(userId, payDto);
-        paymentLink = result.paymentLink;
-      } catch (error) {
-        this.logger.error(`Tạo liên kết thanh toán thất bại cho appointment: ${appt.appointment_id}, error: ${error.message}`);
-        throw new BadRequestException('Tạo liên kết thanh toán thất bại');
-      }
-    }
-
-    // Gửi thông báo email
-    const emailContent = `Lịch hẹn tư vấn của bạn (mã ${appt.appointment_id}) đã được tạo. ${
-      isFreeConsultation ? 'Đã xác nhận vì đây là tư vấn miễn phí.' : 'Vui lòng thanh toán trong 30 phút để xác nhận.'
-    }`;
-    try {
-      const user = await tx.user.findUnique({
-        where: { user_id: userId },
-        select: { email: true, full_name: true },
-      });
-      const consultant = consultant_id ? schedule.consultant : null;
-
-      if (user?.email) {
-        await this.emailService.sendEmail(user.email, 'Lịch hẹn tư vấn đã được tạo', emailContent);
+        if (user.email) {
+          await this.emailService.sendEmail(user.email, 'Đặt lịch xét nghiệm thành công', emailContent);
+          await tx.notification.create({
+            data: {
+              user_id: userId,
+              type: NotificationType.Email,
+              title: 'Đặt lịch xét nghiệm thành công',
+              content: emailContent,
+              status: NotificationStatus.Pending,
+            },
+          });
+        }
         await tx.notification.create({
           data: {
             user_id: userId,
             type: NotificationType.Email,
-            title: 'Lịch hẹn tư vấn đã được tạo',
-            content: emailContent,
+            title: 'Hướng dẫn chuẩn bị xét nghiệm STI',
+            content: `Chào ${user.full_name || 'Khách hàng'},
+Để đảm bảo kết quả xét nghiệm "${svc.name}" chính xác, vui lòng nhịn ăn 4-6 giờ trước khi lấy mẫu (nếu tại phòng khám) hoặc làm theo hướng dẫn trong bộ xét nghiệm tại nhà.`,
             status: NotificationStatus.Pending,
           },
         });
+      } catch (error) {
+        this.logger.error(`Gửi email/notification thất bại: appointmentId=${appt.appointment_id}, username=${username}, serviceName=${svc.name}, error=${error instanceof Error ? error.message : 'Unknown error'}`);
       }
-      if (consultant?.user?.email) {
-        await tx.notification.create({
-          data: {
-            user_id: consultant.user.user_id, // Use user_id from select
-            type: NotificationType.Email,
-            title: 'Lịch hẹn tư vấn mới',
-            content: `Lịch hẹn tư vấn mới (mã ${appt.appointment_id}) đã được tạo cho bạn.`,
-            status: NotificationStatus.Pending,
-          },
-        });
-      }
+
+      return [appt, payment, testResult];
+    });
+
+    // Tạo payment link
+    const payDto: CreatePaymentDto = {
+      orderCode: orderCode!,
+      amount: Number(svc.price),
+      description: `XN ${svc.name}`.substring(0, 25),
+      cancelUrl: `${process.env.FRONTEND_URL_LOCAL}/cancel`,
+      returnUrl: `${process.env.FRONTEND_URL_LOCAL}/success`,
+      buyerName: user.full_name || userId,
+      buyerEmail: user.email,
+      buyerPhone: user.phone_number ?? undefined,
+      paymentMethod: PaymentMethod.BankCard,
+      appointmentId: appt.appointment_id,
+    };
+    let paymentLink: string;
+    try {
+      const result = await this.paymentService.createPaymentLink(userId, payDto);
+      paymentLink = result.paymentLink;
     } catch (error) {
-      this.logger.error(`Gửi email thất bại cho appointment: ${appt.appointment_id}, error: ${error.message}`);
-      // Không ném lỗi để tránh làm gián đoạn
+      this.logger.error(`Tạo liên kết thanh toán thất bại: appointmentId=${appt.appointment_id}, username=${username}, serviceName=${svc.name}, orderCode=${orderCode}, error=${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new BadRequestException('Tạo liên kết thanh toán thất bại');
     }
 
-    this.logger.log(`Tạo lịch hẹn thành công: appointment_id=${appt.appointment_id}, userId=${userId}, isFreeConsultation=${isFreeConsultation}`);
+    // Tạo đơn GHN nếu AT_HOME
+    if (selected_mode === ServiceMode.AT_HOME && shippingInfoId) {
+      try {
+        ghnOrder = await this.shippingService.createOrderForAppointment(appt.appointment_id);
+        await this.prisma.shippingInfo.update({
+          where: { id: shippingInfoId },
+          data: {
+            provider_order_code: ghnOrder.order_code,
+            shipping_status: ShippingStatus.Shipped,
+            expected_delivery_time: ghnOrder.expected_delivery_time ? new Date(ghnOrder.expected_delivery_time) : undefined,
+            label_url: ghnOrder.label || null,
+          },
+        });
+      } catch (error) {
+        this.logger.error(`Tạo đơn GHN thất bại: appointmentId=${appt.appointment_id}, username=${username}, serviceName=${svc.name}, shippingInfoId=${shippingInfoId}, error=${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    }
+
+    this.logger.log(`Tạo lịch xét nghiệm thành công: appointmentId=${appt.appointment_id}, username=${username}, serviceName=${svc.name}, testCode=${testResult.test_code}${ghnOrder ? `, ghnOrderCode=${ghnOrder.order_code}` : ''}`);
     return {
       appointment: appt,
       paymentLink,
       orderCode,
-      message: isFreeConsultation
-        ? 'Đặt lịch tư vấn miễn phí thành công, đã xác nhận'
-        : 'Đặt lịch tư vấn thành công, vui lòng thanh toán trong 30 phút',
+      testCode: testResult.test_code,
+      ghnOrderCode: ghnOrder?.order_code || null,
+      message: 'Đặt lịch xét nghiệm thành công',
+      return_address: svc.return_address,
+      return_phone: svc.return_phone,
+      preparationGuide: 'Nhịn ăn 4-6 giờ trước khi lấy mẫu (nếu tại phòng khám) hoặc làm theo hướng dẫn trong bộ xét nghiệm tại nhà.',
     };
-  });
-}
+  }
+
+
+
+
+  async createAppointment(dto: CreateAppointmentDto & { userId: string }) {
+    const { consultant_id, schedule_id, service_id, type, location, userId, test_code, mode } = dto;
+
+    // Lấy thông tin user ngay từ đầu để sử dụng trong logging
+    const user = await this.prisma.user.findUnique({
+      where: { user_id: userId },
+      select: { full_name: true, email: true, phone_number: true },
+    });
+    if (!user) {
+      this.logger.error(`Không tìm thấy người dùng: userId=${userId}`);
+      throw new BadRequestException('Người dùng không tồn tại');
+    }
+    const username = user.full_name || 'Khách hàng'; // Fallback nếu full_name là null
+
+    // Kiểm tra dịch vụ
+    const svc = await this.prisma.service.findUnique({
+      where: { service_id, deleted_at: null, is_active: true },
+      select: { service_id: true, name: true, price: true, type: true, available_modes: true },
+    });
+    if (!svc || svc.type !== ServiceType.Consultation) {
+      this.logger.error(`Dịch vụ không hợp lệ hoặc không hoạt động: serviceId=${service_id}, serviceName=${svc?.name || 'Unknown'}, username=${username}`);
+      throw new BadRequestException('Dịch vụ không hợp lệ hoặc không hoạt động');
+    }
+
+    // Kiểm tra mode
+    const availableModes: ServiceMode[] = Array.isArray(svc.available_modes)
+      ? svc.available_modes
+      : typeof svc.available_modes === 'string'
+        ? JSON.parse(svc.available_modes)
+        : [];
+    if (!availableModes.includes(mode as ServiceMode)) {
+      this.logger.error(`Hình thức không được hỗ trợ: mode=${mode}, available_modes=${JSON.stringify(availableModes)}, serviceName=${svc.name}, username=${username}`);
+      throw new BadRequestException('Hình thức tư vấn không được hỗ trợ bởi dịch vụ này');
+    }
+
+    // Kiểm tra lịch trình
+    const schedule = await this.prisma.schedule.findUnique({
+      where: { schedule_id, is_booked: false, deleted_at: null },
+      select: {
+        schedule_id: true,
+        consultant_id: true,
+        start_time: true,
+        end_time: true,
+        max_appointments_per_day: true,
+        consultant: {
+          select: {
+            is_verified: true,
+            specialization: true,
+            user: { select: { user_id: true, email: true, full_name: true } },
+          },
+        },
+      },
+    });
+    if (!schedule) {
+      this.logger.error(`Lịch trống không tồn tại hoặc đã được đặt: schedule_id=${schedule_id}, serviceName=${svc.name}, username=${username}`);
+      throw new BadRequestException('Lịch trống không tồn tại hoặc đã được đặt');
+    }
+    const consultantName = schedule.consultant.user.full_name || 'Tư vấn viên';
+
+    // Kiểm tra consultant
+    if (consultant_id && consultant_id !== schedule.consultant_id) {
+      this.logger.error(`Consultant không khớp với lịch trình: consultant_id=${consultant_id}, consultantName=${consultantName}, schedule_id=${schedule_id}, serviceName=${svc.name}, username=${username}`);
+      throw new BadRequestException('Consultant không hợp lệ cho lịch trình này');
+    }
+    if (!schedule.consultant.is_verified) {
+      this.logger.error(`Consultant chưa được xác minh: consultant_id=${consultant_id}, consultantName=${consultantName}, serviceName=${svc.name}, username=${username}`);
+      throw new BadRequestException('Consultant chưa được xác minh');
+    }
+
+    // Kiểm tra thời gian hợp lệ
+    const now = new Date();
+    const maxDate = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000);
+    if (schedule.start_time.getFullYear() > now.getFullYear()) {
+      this.logger.error(`Ngày đặt lịch vượt quá năm hiện tại: start_time=${schedule.start_time.toISOString()}, currentYear=${now.getFullYear()}, serviceName=${svc.name}, username=${username}`);
+      throw new BadRequestException('Không thể đặt lịch trước năm sau');
+    }
+    if (schedule.start_time < now || schedule.start_time > maxDate) {
+      this.logger.error(`Thời gian lịch hẹn không hợp lệ: start_time=${schedule.start_time.toISOString()}, now=${now.toISOString()}, maxDate=${maxDate.toISOString()}, serviceName=${svc.name}, username=${username}`);
+      throw new BadRequestException('Lịch hẹn phải trong vòng 2 tháng từ hiện tại và không sớm hơn hôm nay');
+    }
+
+    // Kiểm tra giới hạn lịch hẹn mỗi ngày cho user
+    const startOfDay = new Date(schedule.start_time);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(schedule.start_time);
+    endOfDay.setHours(23, 59, 59, 999);
+    const userAppointments = await this.prisma.appointment.count({
+      where: {
+        user_id: userId,
+        start_time: { gte: startOfDay, lte: endOfDay },
+        status: { not: AppointmentStatus.Cancelled },
+        payment_status: PaymentStatus.Paid,
+        deleted_at: null,
+      },
+    });
+    if (userAppointments >= 2) {
+      this.logger.error(`Người dùng đã đặt tối đa 2 lịch hẹn trong ngày: username=${username}, date=${startOfDay.toISOString()}, serviceName=${svc.name}, appointmentCount=${userAppointments}`);
+      throw new BadRequestException('Bạn chỉ có thể đặt tối đa 2 lịch hẹn mỗi ngày');
+    }
+
+    // Kiểm tra giới hạn lịch hẹn của consultant
+    const consultantAppointments = await this.prisma.appointment.count({
+      where: {
+        consultant_id: schedule.consultant_id,
+        start_time: { gte: startOfDay, lte: endOfDay },
+        status: { not: AppointmentStatus.Cancelled },
+        payment_status: PaymentStatus.Paid,
+        deleted_at: null,
+      },
+    });
+    const maxAppointments = schedule.max_appointments_per_day ?? 5;
+    if (consultantAppointments >= maxAppointments) {
+      this.logger.error(`Consultant đã đầy lịch hẹn trong ngày: consultantName=${consultantName}, date=${startOfDay.toISOString()}, serviceName=${svc.name}, appointmentCount=${consultantAppointments}, maxAppointments=${maxAppointments}`);
+      throw new BadRequestException('Consultant đã đầy lịch hẹn trong ngày này');
+    }
+
+    // Kiểm tra trùng lịch của consultant
+    const consultantOverlap = await this.prisma.appointment.findFirst({
+      where: {
+        consultant_id: schedule.consultant_id,
+        start_time: { lte: schedule.end_time },
+        end_time: { gte: schedule.start_time },
+        status: { not: AppointmentStatus.Cancelled },
+        payment_status: PaymentStatus.Paid,
+        deleted_at: null,
+      },
+    });
+    if (consultantOverlap) {
+      this.logger.error(`Trùng lịch consultant: consultantName=${consultantName}, start_time=${schedule.start_time.toISOString()}, serviceName=${svc.name}, username=${username}, existingAppointmentId=${consultantOverlap.appointment_id}`);
+      throw new BadRequestException('Thời gian trùng với lịch hẹn khác của consultant');
+    }
+
+    // Kiểm tra trùng lịch của user
+    const userOverlap = await this.prisma.appointment.findFirst({
+      where: {
+        user_id: userId,
+        service_id,
+        start_time: { lte: schedule.end_time },
+        end_time: { gte: schedule.start_time },
+        status: { not: AppointmentStatus.Cancelled },
+        payment_status: PaymentStatus.Paid,
+        deleted_at: null,
+      },
+    });
+    if (userOverlap) {
+      this.logger.error(`Trùng lịch hẹn: username=${username}, serviceName=${svc.name}, start_time=${schedule.start_time.toISOString()}, existingAppointmentId=${userOverlap.appointment_id}`);
+      throw new BadRequestException('Bạn đã có lịch hẹn trùng thời gian cho dịch vụ này');
+    }
+
+    // Kiểm tra số lượng lịch hẹn chưa thanh toán
+    const pendingAppointments = await this.prisma.appointment.count({
+      where: {
+        user_id: userId,
+        service_id,
+        payment_status: PaymentStatus.Pending,
+        status: { not: AppointmentStatus.Cancelled },
+        deleted_at: null,
+      },
+    });
+    if (pendingAppointments >= 3) {
+      this.logger.error(`Quá nhiều lịch hẹn chưa thanh toán: username=${username}, serviceName=${svc.name}, pendingCount=${pendingAppointments}`);
+      throw new BadRequestException('Bạn có quá nhiều lịch hẹn chưa thanh toán cho dịch vụ này');
+    }
+
+    // Kiểm tra tư vấn miễn phí với test_code
+    let isFreeConsultation = false;
+    let paymentAmount = Number(svc.price);
+    let related_appointment_id: string | undefined;
+    if (test_code) {
+      const testResult = await this.prisma.testResult.findUnique({
+        where: { test_code },
+        include: {
+          appointment: {
+            select: {
+              appointment_id: true,
+              user_id: true,
+              type: true,
+              status: true,
+              deleted_at: true,
+              free_consultation_valid_until: true,
+            },
+          },
+        },
+      });
+      if (!testResult || !testResult.appointment) {
+        this.logger.error(`Mã xét nghiệm không hợp lệ: test_code=${test_code}, username=${username}, serviceName=${svc.name}`);
+        throw new BadRequestException('Mã xét nghiệm không hợp lệ');
+      }
+      const relatedAppt = testResult.appointment;
+      if (
+        relatedAppt.user_id === userId &&
+        relatedAppt.type === AppointmentType.Testing &&
+        relatedAppt.status === AppointmentStatus.Completed &&
+        !relatedAppt.deleted_at &&
+        relatedAppt.free_consultation_valid_until &&
+        new Date() <= relatedAppt.free_consultation_valid_until
+      ) {
+        const freeConsults = await this.prisma.appointment.count({
+          where: { related_appointment_id: relatedAppt.appointment_id, is_free_consultation: true, deleted_at: null },
+        });
+        if (freeConsults < 1) {
+          isFreeConsultation = true;
+          paymentAmount = 0;
+          related_appointment_id = relatedAppt.appointment_id;
+        } else {
+          this.logger.error(`Mã xét nghiệm đã được sử dụng cho tư vấn miễn phí: test_code=${test_code}, username=${username}, serviceName=${svc.name}`);
+          throw new BadRequestException('Mã xét nghiệm đã được sử dụng cho tư vấn miễn phí');
+        }
+      } else {
+        this.logger.error(`Mã xét nghiệm không hợp lệ hoặc hết hạn: test_code=${test_code}, username=${username}, serviceName=${svc.name}`);
+        throw new BadRequestException('Mã xét nghiệm không hợp lệ hoặc đã hết hạn miễn phí');
+      }
+    }
+
+    // Transaction: Tạo appointment và các bản ghi liên quan
+    return this.prisma.$transaction(async (tx) => {
+      // Tạo appointment
+      const appt = await tx.appointment.create({
+        data: {
+          user_id: userId,
+          consultant_id,
+          type: AppointmentType.Consultation,
+          start_time: schedule.start_time,
+          end_time: schedule.end_time,
+          status: AppointmentStatus.Pending,
+          payment_status: isFreeConsultation ? PaymentStatus.Paid : PaymentStatus.Pending,
+          location: mode === ServiceMode.ONLINE ? null : location,
+          service_id,
+          schedule_id,
+          is_free_consultation: isFreeConsultation,
+          related_appointment_id,
+          mode,
+        },
+      });
+
+      // Đặt is_booked: true chỉ khi tư vấn miễn phí
+      if (isFreeConsultation) {
+        await tx.schedule.update({
+          where: { schedule_id },
+          data: { is_booked: true },
+        });
+      }
+
+      // Ghi lịch sử trạng thái
+      await tx.appointmentStatusHistory.create({
+        data: {
+          appointment_id: appt.appointment_id,
+          status: AppointmentStatus.Pending,
+          notes: isFreeConsultation ? `Tạo lịch hẹn tư vấn miễn phí (${mode})` : `Tạo lịch hẹn tư vấn (${mode})`,
+          changed_by: userId,
+        },
+      });
+
+      // Ghi audit log
+      await tx.auditLog.create({
+        data: {
+          user_id: userId,
+          action: 'CREATE_APPOINTMENT',
+          entity_type: 'Appointment',
+          entity_id: appt.appointment_id,
+          details: { mode, isFreeConsultation, service_id, consultant_id },
+        },
+      });
+
+      // Tạo payment nếu không miễn phí
+      let paymentLink: string | undefined;
+      let orderCode: number | undefined;
+      if (!isFreeConsultation) {
+        for (let i = 0; i < 5; i++) {
+          const cand = Number(`${Date.now() % 100000}${Math.floor(Math.random() * 1000)}`.padStart(8, '0'));
+          if (!(await tx.payment.findUnique({ where: { order_code: cand } }))) {
+            orderCode = cand;
+            break;
+          }
+        }
+        if (!orderCode) {
+          this.logger.error(`Không thể tạo orderCode: username=${username}, serviceName=${svc.name}, appointmentId=${appt.appointment_id}`);
+          throw new BadRequestException('Tạo mã thanh toán thất bại');
+        }
+
+        await tx.payment.create({
+          data: {
+            appointment_id: appt.appointment_id,
+            user_id: userId,
+            amount: paymentAmount,
+            payment_method: PaymentMethod.BankCard,
+            status: PaymentTransactionStatus.Pending,
+            order_code: orderCode,
+            expires_at: new Date(Date.now() + 30 * 60 * 1000),
+          },
+        });
+
+        const payDto: CreatePaymentDto = {
+          orderCode,
+          amount: paymentAmount,
+          description: `Hẹn ${svc.name}`.substring(0, 25),
+          cancelUrl: `${process.env.FRONTEND_URL_LOCAL}/cancel`,
+          returnUrl: `${process.env.FRONTEND_URL_LOCAL}/success`,
+          buyerName: user.full_name || userId,
+          buyerEmail: user.email,
+          buyerPhone: user.phone_number ?? undefined,
+          paymentMethod: PaymentMethod.BankCard,
+          appointmentId: appt.appointment_id,
+        };
+
+        try {
+          const result = await this.paymentService.createPaymentLink(userId, payDto);
+          paymentLink = result.paymentLink;
+        } catch (error) {
+          this.logger.error(`Tạo liên kết thanh toán thất bại: appointmentId=${appt.appointment_id}, username=${username}, serviceName=${svc.name}, orderCode=${orderCode}, error=${error instanceof Error ? error.message : 'Unknown error'}`);
+          throw new BadRequestException('Tạo liên kết thanh toán thất bại');
+        }
+      }
+
+      // Gửi thông báo email
+      const startTimeFormatted = schedule.start_time.toLocaleString('vi-VN', {
+        dateStyle: 'short',
+        timeStyle: 'short',
+      });
+      const locationInfo = mode === ServiceMode.ONLINE ? ' trực tuyến' : ` tại ${location}`;
+      const emailContent = `Chào ${user.full_name || 'Khách hàng'},
+Lịch hẹn tư vấn "${svc.name}" của bạn với ${consultantName} vào ${startTimeFormatted}${locationInfo} đã được tạo.
+Mã lịch hẹn: ${appt.appointment_id}.
+${isFreeConsultation ? 'Đã xác nhận vì đây là tư vấn miễn phí.' : 'Vui lòng thanh toán trong 30 phút để xác nhận.'}`;
+
+      try {
+        if (user.email) {
+          await this.emailService.sendEmail(user.email, 'Đặt lịch tư vấn thành công', emailContent);
+          await tx.notification.create({
+            data: {
+              user_id: userId,
+              type: NotificationType.Email,
+              title: 'Đặt lịch tư vấn thành công',
+              content: emailContent,
+              status: NotificationStatus.Pending,
+            },
+          });
+        }
+        if (schedule.consultant.user.email) {
+          await tx.notification.create({
+            data: {
+              user_id: schedule.consultant.user.user_id,
+              type: NotificationType.Email,
+              title: 'Lịch hẹn tư vấn mới',
+              content: `Chào ${consultantName},
+Lịch hẹn tư vấn "${svc.name}" mới với ${user.full_name || 'Khách hàng'} vào ${startTimeFormatted}${locationInfo} đã được tạo.
+Mã lịch hẹn: ${appt.appointment_id}.`,
+              status: NotificationStatus.Pending,
+            },
+          });
+        }
+      } catch (error) {
+        this.logger.error(`Gửi email/notification thất bại: appointmentId=${appt.appointment_id}, username=${username}, serviceName=${svc.name}, consultantName=${consultantName}, error=${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+
+      this.logger.log(`Tạo lịch hẹn thành công: appointmentId=${appt.appointment_id}, username=${username}, serviceName=${svc.name}, consultantName=${consultantName}, isFreeConsultation=${isFreeConsultation}${orderCode ? `, orderCode=${orderCode}` : ''}`);
+      return {
+        appointment: appt,
+        paymentLink,
+        orderCode,
+        message: isFreeConsultation
+          ? 'Đặt lịch tư vấn miễn phí thành công, đã xác nhận'
+          : 'Đặt lịch tư vấn thành công, vui lòng thanh toán trong 30 phút',
+      };
+    });
+  }
 
   // Hàm tạo testCode duy nhất
   private async generateUniqueTestCode(category: string): Promise<string> {

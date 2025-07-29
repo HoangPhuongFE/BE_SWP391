@@ -1,6 +1,6 @@
 import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
-import { CreateServiceDto, ServiceMode } from '../dtos/create-service.dto';
+import { CreateServiceDto ,ServiceMode  } from '../dtos/create-service.dto';
 import { UpdateServiceDto } from '../dtos/update-service.dto';
 import { ServiceType } from '@prisma/client';
 
@@ -26,10 +26,24 @@ export class ServiceService {
       daily_capacity,
     } = dto;
 
-    // Thu thập lỗi
     const errors: { field: string; message: string }[] = [];
 
-    // Kiểm tra dịch vụ đã tồn tại
+    // --- 1. Validate available_modes theo type ---
+    if (available_modes && available_modes.length > 0) {
+      const allowedForConsult: ServiceMode[] = [ServiceMode.AT_CLINIC, ServiceMode.ONLINE];
+      const allowedForTest:    ServiceMode[] = [ServiceMode.AT_HOME,    ServiceMode.AT_CLINIC];
+      const allowed = type === ServiceType.Consultation ? allowedForConsult : allowedForTest;
+
+      const invalidModes = available_modes.filter(m => !allowed.includes(m));
+      if (invalidModes.length) {
+        errors.push({
+          field: 'available_modes',
+          message: `Loại dịch vụ ${type} chỉ cho phép: ${allowed.join(', ')}; bạn vừa truyền: ${invalidModes.join(', ')}`,
+        });
+      }
+    }
+
+    // --- 2. Kiểm tra trùng tên trong cùng category ---
     const existing = await this.prisma.service.findFirst({
       where: { category, name, deleted_at: null },
     });
@@ -37,8 +51,8 @@ export class ServiceService {
       errors.push({ field: 'name', message: `Dịch vụ với danh mục '${category}' và tên '${name}' đã tồn tại` });
     }
 
-    // Kiểm tra return_address và return_phone
-    if (type === ServiceType.Testing || (available_modes ?? []).includes('AT_HOME' as ServiceMode)) {
+    // --- 3. Với Testing hoặc có AT_HOME thì return_address & return_phone bắt buộc ---
+    if (type === ServiceType.Testing || (available_modes ?? []).includes(ServiceMode.AT_HOME)) {
       if (!return_address) {
         errors.push({ field: 'return_address', message: 'Địa chỉ nhận mẫu là bắt buộc' });
       }
@@ -47,7 +61,12 @@ export class ServiceService {
       }
     }
 
-    // Trả về lỗi nếu có
+    // --- 4. daily_capacity bắt buộc > 0 ---
+    if (daily_capacity === undefined || daily_capacity <= 0) {
+      errors.push({ field: 'daily_capacity', message: 'Lịch đặt mỗi ngày là bắt buộc và phải > 0' });
+    }
+
+    // Trả về nếu có lỗi
     if (errors.length > 0) {
       return {
         statusCode: 400,
@@ -56,19 +75,16 @@ export class ServiceService {
       };
     }
 
-    // Gán giá trị mặc định
+    // --- 5. Gán giá trị mặc định testing_hours ---
     const defaultTestingHours =
       type === ServiceType.Testing
         ? { morning: { start: '07:00', end: '11:00' }, afternoon: { start: '13:00', end: '17:00' } }
         : { all_day: { start: '08:00', end: '17:00' } };
 
-    if (daily_capacity === undefined || daily_capacity <= 0) {
-      errors.push({ field: 'daily_capacity', message: 'Lịch đặt mỗi ngày là bắt buộc và phải > 0' });
-    }
     const finalReturnAddress = return_address ?? 'Không áp dụng';
     const finalReturnPhone = return_phone ?? 'Không áp dụng';
 
-    // Tạo dịch vụ
+    // Tạo service
     return this.prisma.service.create({
       data: {
         name,
@@ -77,9 +93,9 @@ export class ServiceService {
         description,
         is_active,
         type,
-        available_modes: available_modes ?? ['AT_CLINIC'],
+        available_modes,
         testing_hours: defaultTestingHours,
-        daily_capacity: daily_capacity,
+        daily_capacity,
         return_address: finalReturnAddress,
         return_phone: finalReturnPhone,
         created_at: new Date(),
@@ -88,31 +104,24 @@ export class ServiceService {
     });
   }
 
-
-
   async updateService(serviceId: string, dto: UpdateServiceDto) {
-    const errors: { field: string; message: string }[] = [];
-
-    // Kiểm tra dịch vụ tồn tại
     const service = await this.prisma.service.findUnique({
       where: { service_id: serviceId, deleted_at: null },
     });
 
+    const errors: { field: string; message: string }[] = [];
+
     if (!service) {
       errors.push({ field: 'serviceId', message: 'Dịch vụ không tồn tại' });
-      return {
-        statusCode: 400,
-        message: 'Dữ liệu không hợp lệ',
-        errors,
-      };
+      return { statusCode: 400, message: 'Dữ liệu không hợp lệ', errors };
     }
 
-    // Kiểm tra giá
+    // --- 1. Validate giá ---
     if (dto.price !== undefined && dto.price < 0) {
       errors.push({ field: 'price', message: 'Giá phải là số dương' });
     }
 
-    // Kiểm tra trùng tên và danh mục
+    // --- 2. Kiểm tra trùng tên/category nếu có cập nhật ---
     if (dto.name || dto.category) {
       const existing = await this.prisma.service.findFirst({
         where: {
@@ -130,28 +139,40 @@ export class ServiceService {
       }
     }
 
-    // Kiểm tra category cho Consultation
-    const updateType = dto.type ?? service.type;
-    if (updateType === ServiceType.Consultation && dto.category) {
-      const relatedTest = await this.prisma.service.findFirst({
-        where: { category: dto.category, type: ServiceType.Testing, deleted_at: null },
-      });
-      if (!relatedTest) {
-        this.logger.warn(`Không tìm thấy dịch vụ xét nghiệm cho category: ${dto.category}`);
-      }
-    }
-
-    // Kiểm tra return_address và return_phone
-    const updatedModes = dto.available_modes ?? (service.available_modes as string[] ?? []);
+    // --- 3. Kiểm tra return_address và return_phone nếu cần ---
+    const newType = dto.type ?? service.type;
+    const updatedModes = dto.available_modes ?? (service.available_modes as ServiceMode[] ?? []);
     const mergedAddress = dto.return_address ?? service.return_address ?? 'Không áp dụng';
-    const mergedPhone = dto.return_phone ?? service.return_phone ?? 'Không áp dụng';
-    if (updateType === ServiceType.Testing || updatedModes.includes('AT_HOME' as ServiceMode)) {
+    const mergedPhone   = dto.return_phone   ?? service.return_phone   ?? 'Không áp dụng';
+
+    if (newType === ServiceType.Testing || updatedModes.includes(ServiceMode.AT_HOME)) {
       if (!mergedAddress || mergedAddress === 'Không áp dụng') {
         errors.push({ field: 'return_address', message: 'Địa chỉ nhận mẫu là bắt buộc' });
       }
       if (!mergedPhone || mergedPhone === 'Không áp dụng') {
         errors.push({ field: 'return_phone', message: 'Số điện thoại nhận mẫu là bắt buộc' });
       }
+    }
+
+    // --- 4. Validate available_modes theo newType ---
+    if (updatedModes && updatedModes.length > 0) {
+      const allowedForConsult: ServiceMode[] = [ServiceMode.AT_CLINIC, ServiceMode.ONLINE];
+      const allowedForTest:    ServiceMode[] = [ServiceMode.AT_HOME,    ServiceMode.AT_CLINIC];
+      const allowed = newType === ServiceType.Consultation ? allowedForConsult : allowedForTest;
+
+      const invalidModes = updatedModes.filter(m => !allowed.includes(m));
+      if (invalidModes.length) {
+        errors.push({
+          field: 'available_modes',
+          message: `Loại dịch vụ ${newType} chỉ cho phép: ${allowed.join(', ')}; bạn vừa truyền: ${invalidModes.join(', ')}`,
+        });
+      }
+    }
+
+    // --- 5. Validate daily_capacity sau merge ---
+    const finalDailyCapacity = dto.daily_capacity ?? service.daily_capacity;
+    if (finalDailyCapacity === undefined || finalDailyCapacity === null || finalDailyCapacity <= 0) {
+      errors.push({ field: 'daily_capacity', message: 'Lịch đặt mỗi ngày là bắt buộc và phải > 0' });
     }
 
     // Trả về lỗi nếu có
@@ -163,17 +184,13 @@ export class ServiceService {
       };
     }
 
-    // Gán giá trị mặc định cho testing_hours và daily_capacity
+    // --- 6. Gán giá trị testing_hours ---
     const defaultTestingHours =
-      updateType === ServiceType.Testing
+      newType === ServiceType.Testing
         ? service.testing_hours ?? { morning: { start: '07:00', end: '11:00' }, afternoon: { start: '13:00', end: '17:00' } }
         : { all_day: { start: '08:00', end: '17:00' } };
-    const finalDailyCapacity = dto.daily_capacity ?? service.daily_capacity;
-    if (finalDailyCapacity === undefined || finalDailyCapacity === null || finalDailyCapacity <= 0) {
-      errors.push({ field: 'daily_capacity', message: 'Lịch đặt mỗi ngày là bắt buộc và phải > 0' });
-    }
 
-    // Cập nhật dịch vụ
+    // Cập nhật service
     return this.prisma.service.update({
       where: { service_id: serviceId },
       data: {
@@ -182,7 +199,7 @@ export class ServiceService {
         price: dto.price ?? service.price,
         description: dto.description ?? service.description,
         is_active: dto.is_active ?? service.is_active,
-        type: updateType,
+        type: newType,
         available_modes: updatedModes,
         testing_hours: defaultTestingHours,
         daily_capacity: finalDailyCapacity,

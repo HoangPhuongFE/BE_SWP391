@@ -43,7 +43,7 @@ export class CreateServiceDto {
   @IsEnum(ServiceType)
   type: ServiceType;
 
-  @ApiPropertyOptional({ example: ['AT_HOME', 'AT_CLINIC'], isArray: true, enum: ServiceMode, description: 'Các hình thức dịch vụ hỗ trợ' })
+  @ApiPropertyOptional({ example: ['AT_HOME', 'AT_CLINIC', 'ONLINE'], isArray: true, enum: ServiceMode, description: 'Các hình thức dịch vụ hỗ trợ' })
   @IsEnum(ServiceMode, { each: true })
   @IsOptional()
   available_modes?: ServiceMode[];

@@ -39,7 +39,8 @@ export class ServiceController {
    * - serviceId lấy từ URL param.
    * - Nếu cập nhật available_modes thành AT_HOME, cần return_address và return_phone.
    * - Gửi PATCH request với body theo UpdateServiceDto.
-   * - Trả về: Dịch vụ đã cập nhật (JSON).
+   * - Trả về: Dịch vụ đã cập nhật (JSON)
+   * .
    */
   @Patch(':serviceId')
   @Roles(Role.Manager)

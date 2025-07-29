@@ -1,5 +1,5 @@
 import { IsString, IsNotEmpty, Matches, IsOptional } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateStiAppointmentDto {
   @ApiProperty({ description: 'Service ID', example: 'cd75660b-1da1-40a2-8056-6bdbcfb7b99b' })
@@ -17,12 +17,12 @@ export class CreateStiAppointmentDto {
   @IsNotEmpty()
   session: string;
 
-  @ApiProperty({ description: 'Location for AT_CLINIC mode', example: 'Phòng khám X', required: false })
+  @ApiPropertyOptional({ description: 'Location for AT_CLINIC mode', example: 'Phòng khám X' })
   @IsOptional()
   @IsString()
   location?: string;
 
-  @ApiProperty({ description: 'Category', example: 'STI', required: false })
+  @ApiPropertyOptional({ description: 'Category', example: 'STI' })
   @IsOptional()
   @IsString()
   category?: string;
@@ -32,33 +32,33 @@ export class CreateStiAppointmentDto {
   @IsNotEmpty()
   selected_mode: string;
 
-  @ApiProperty({ description: 'Contact name for shipping', example: 'phuonghoang' })
+  @ApiPropertyOptional({ description: 'Contact name for shipping', example: 'phuonghoang' })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  contact_name: string;
+  contact_name?: string;
 
-  @ApiProperty({ description: 'Contact phone for shipping', example: '0938982777' })
-  @IsString()
-  @Matches(/^[0-9]{10}$/, { message: 'Phone number must be 10 digits starting with 0' })
-  contact_phone: string;
+  @ApiPropertyOptional({ description: 'Contact phone for shipping', example: '0938982777' })
+  @IsOptional()
+  @Matches(/^0\d{9}$/, { message: 'Phone number must be 10 digits starting with 0' })
+  contact_phone?: string;
 
-  @ApiProperty({ description: 'Shipping address', example: '01 Lê Lai, Quận Tân Bình, TP.HCM' })
+  @ApiPropertyOptional({ description: 'Shipping address', example: '01 Lê Lai, Quận Tân Bình, TP.HCM' })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  shipping_address: string;
+  shipping_address?: string;
 
-  @ApiProperty({ description: 'Province', example: 'Hồ Chí Minh' })
+  @ApiPropertyOptional({ description: 'Province', example: 'Hồ Chí Minh' })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  province: string;
+  province?: string;
 
-  @ApiProperty({ description: 'District name', example: 'Tân Bình' })
+  @ApiPropertyOptional({ description: 'District name', example: 'Tân Bình' })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  district: string;
+  district?: string;
 
-  @ApiProperty({ description: 'Ward name', example: 'Phường 12' })
+  @ApiPropertyOptional({ description: 'Ward name', example: 'Phường 12' })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  ward: string;
+  ward?: string;
 }

@@ -275,7 +275,7 @@ async function main() {
       price: 10000,
       category: 'Gynecology',
       type: ServiceType.Consultation,
-      available_modes: [ServiceMode.AT_HOME, ServiceMode.AT_CLINIC, ServiceMode.ONLINE],
+      available_modes: [ServiceMode.AT_CLINIC, ServiceMode.ONLINE],
     },
     {
       name: 'Fertility Consultation',
@@ -291,7 +291,7 @@ async function main() {
       price: 25000,
       category: 'General',
       type: ServiceType.Consultation,
-      available_modes: [ServiceMode.AT_HOME, ServiceMode.AT_CLINIC, ServiceMode.ONLINE],
+      available_modes: [ ServiceMode.AT_CLINIC, ServiceMode.ONLINE],
     },
   ];
 

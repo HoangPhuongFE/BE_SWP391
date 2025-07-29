@@ -15,7 +15,7 @@ export class ShippingService {
   // Mapping tên quận/huyện song ngữ + mã trực tiếp
   private readonly districtMapping: Record<string, string> = {
     'quận 1': '1442', 'quan 1': '1442', 'district 1': '1442',
-    'quận tân bình': '1455', 'tan binh': '1455', 'quan tan binh': '1455',
+    'Tân Bình': '1455', 'tan binh': '1455', 'quan tan binh': '1455',
     // Thêm các mapping khác nếu cần
   };
 

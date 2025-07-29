@@ -62,7 +62,9 @@ export class ServiceService {
         ? { morning: { start: '07:00', end: '11:00' }, afternoon: { start: '13:00', end: '17:00' } }
         : { all_day: { start: '08:00', end: '17:00' } };
 
-    const finalDailyCapacity = daily_capacity ?? 10;
+    if (daily_capacity === undefined || daily_capacity <= 0) {
+      errors.push({ field: 'daily_capacity', message: 'Lịch đặt mỗi ngày là bắt buộc và phải > 0' });
+    }
     const finalReturnAddress = return_address ?? 'Không áp dụng';
     const finalReturnPhone = return_phone ?? 'Không áp dụng';
 
@@ -77,7 +79,7 @@ export class ServiceService {
         type,
         available_modes: available_modes ?? ['AT_CLINIC'],
         testing_hours: defaultTestingHours,
-        daily_capacity: finalDailyCapacity,
+        daily_capacity: daily_capacity,
         return_address: finalReturnAddress,
         return_phone: finalReturnPhone,
         created_at: new Date(),
@@ -166,7 +168,10 @@ export class ServiceService {
       updateType === ServiceType.Testing
         ? service.testing_hours ?? { morning: { start: '07:00', end: '11:00' }, afternoon: { start: '13:00', end: '17:00' } }
         : { all_day: { start: '08:00', end: '17:00' } };
-    const defaultDailyCapacity = updateType === ServiceType.Testing ? service.daily_capacity ?? 20 : 10;
+    const finalDailyCapacity = dto.daily_capacity ?? service.daily_capacity;
+    if (finalDailyCapacity === undefined || finalDailyCapacity === null || finalDailyCapacity <= 0) {
+      errors.push({ field: 'daily_capacity', message: 'Lịch đặt mỗi ngày là bắt buộc và phải > 0' });
+    }
 
     // Cập nhật dịch vụ
     return this.prisma.service.update({
@@ -180,7 +185,7 @@ export class ServiceService {
         type: updateType,
         available_modes: updatedModes,
         testing_hours: defaultTestingHours,
-        daily_capacity: defaultDailyCapacity,
+        daily_capacity: finalDailyCapacity,
         return_address: mergedAddress,
         return_phone: mergedPhone,
         updated_at: new Date(),
@@ -204,48 +209,48 @@ export class ServiceService {
     });
   }
 
-async getServices(category?: string, isActive?: boolean) {
-  const where: any = { deleted_at: null };
-  if (category) where.category = category;
-  if (isActive !== undefined) where.is_active = isActive;
+  async getServices(category?: string, isActive?: boolean) {
+    const where: any = { deleted_at: null };
+    if (category) where.category = category;
+    if (isActive !== undefined) where.is_active = isActive;
 
-  const services = await this.prisma.service.findMany({
-    where,
-    include: {
-      schedules: {
-        where: { deleted_at: null },
-        select: {
-          consultant_id: true,
-          consultant: {
-            select: {
-              user: { select: { full_name: true, email: true } },
+    const services = await this.prisma.service.findMany({
+      where,
+      include: {
+        schedules: {
+          where: { deleted_at: null },
+          select: {
+            consultant_id: true,
+            consultant: {
+              select: {
+                user: { select: { full_name: true, email: true } },
+              },
             },
           },
         },
       },
-    },
-  });
+    });
 
-  return services.map(service => ({
-    service_id: service.service_id,
-    name: service.name,
-    description: service.description,
-    price: service.price,
-    category: service.category,
-    is_active: service.is_active,
-    type: service.type,
-    testing_hours: service.testing_hours,
-    daily_capacity: service.daily_capacity,
-    return_address: service.return_address,
-    return_phone: service.return_phone,
-    available_modes: service.available_modes,
-    consultants: service.schedules.map(schedule => ({
-      consultant_id: schedule.consultant_id,
-      full_name: schedule.consultant?.user?.full_name,
-      email: schedule.consultant?.user?.email,
-    })),
-  }));
-}
+    return services.map(service => ({
+      service_id: service.service_id,
+      name: service.name,
+      description: service.description,
+      price: service.price,
+      category: service.category,
+      is_active: service.is_active,
+      type: service.type,
+      testing_hours: service.testing_hours,
+      daily_capacity: service.daily_capacity,
+      return_address: service.return_address,
+      return_phone: service.return_phone,
+      available_modes: service.available_modes,
+      consultants: service.schedules.map(schedule => ({
+        consultant_id: schedule.consultant_id,
+        full_name: schedule.consultant?.user?.full_name,
+        email: schedule.consultant?.user?.email,
+      })),
+    }));
+  }
 
   async getServiceById(serviceId: string, date?: string) {
     const service = await this.prisma.service.findUnique({

@@ -58,11 +58,10 @@ export class CreateServiceDto {
   @IsOptional()
   return_phone?: string;
 
-  @ApiPropertyOptional({ example: 20, description: 'Số lượng lịch hẹn tối đa mỗi ngày' })
+  @ApiProperty({ example: 20, description: 'Số lượng lịch hẹn tối đa mỗi ngày' })
   @IsInt()
   @Min(0)
-  @IsOptional()
-  daily_capacity?: number;
+  daily_capacity: number;
 
 
 }

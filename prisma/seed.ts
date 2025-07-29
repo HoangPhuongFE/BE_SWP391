@@ -7,7 +7,7 @@ const prisma = new PrismaClient();
 
 const coreRoles = ['Admin', 'Manager', 'Staff'];
 const consultantEmails = ['consultant1@gmail.com', 'consultant2@gmail.com', 'consultant3@gmail.com', 'consultant4@gmail.com'];
-const customerEmails = ['customer1@gmail.com', 'customer2@gmail.com', 'customer3@gmail.com', 'customer4@gmail.com', 'customer5@gmail.com', 'customer6@gmail.com'];
+const customerEmails = ['thaikhoa09@gmail.com', 'hoang093898xxx@gmail.com', 'hoagnpse161446@fpt.edu.vn', 'customer4@gmail.com', 'customer5@gmail.com', 'customer6@gmail.com'];
 
 async function main() {
   const defaultPassword = 'a123456';

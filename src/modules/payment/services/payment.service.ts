@@ -124,7 +124,7 @@ async processPaymentCallback(payload: any) {
       where: { schedule_id: updatedAppointment.schedule_id },
       data: { is_booked: true },
     });
-    this.logger.log(`Schedule ${updatedAppointment.schedule_id} marked as booked`);
+    this.logger.log(`Lịch ${updatedAppointment.schedule_id} đã được cập nhật is_booked=true`);
   }
 
   this.logger.log(`Payment success: appointment_id=${payment.appointment_id}, status=Confirmed, payment_status=Paid`);

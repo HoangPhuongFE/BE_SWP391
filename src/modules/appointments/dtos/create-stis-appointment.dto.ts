@@ -1,66 +1,64 @@
-import { IsString, IsEnum, IsOptional, IsDateString, ValidateIf } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { ServiceMode } from '@modules/services/dtos/create-service.dto';
-
-export enum TestingSession {
-  Morning = 'morning',
-  Afternoon = 'afternoon',
-}
+import { IsString, IsNotEmpty, Matches, IsOptional } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateStiAppointmentDto {
-  @ApiProperty({ example: 'svc001', description: 'ID dịch vụ xét nghiệm' })
+  @ApiProperty({ description: 'Service ID', example: 'cd75660b-1da1-40a2-8056-6bdbcfb7b99b' })
   @IsString()
+  @IsNotEmpty()
   serviceId: string;
 
-  @ApiProperty({ example: '2025-06-15', description: 'Ngày xét nghiệm (YYYY-MM-DD)' })
-  @IsDateString()
+  @ApiProperty({ description: 'Date of appointment (YYYY-MM-DD)', example: '2025-07-24' })
+  @IsString()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'Date must be in YYYY-MM-DD format' })
   date: string;
 
-  @ApiProperty({ example: 'morning', enum: TestingSession, description: 'Buổi xét nghiệm' })
-  @IsEnum(TestingSession)
-  session: TestingSession;
+  @ApiProperty({ description: 'Session (e.g., morning, afternoon)', example: 'morning' })
+  @IsString()
+  @IsNotEmpty()
+  session: string;
 
-  @ApiPropertyOptional({ example: 'Phòng khám X', description: 'Địa điểm xét nghiệm tại cơ sở (bắt buộc cho AT_CLINIC)' })
-  @ValidateIf((o) => o.selected_mode === ServiceMode.AT_CLINIC)
+  @ApiProperty({ description: 'Location for AT_CLINIC mode', example: 'Phòng khám X', required: false })
+  @IsOptional()
   @IsString()
   location?: string;
 
-  @ApiPropertyOptional({ example: 'STI', description: 'Loại xét nghiệm' })
-  @IsString()
+  @ApiProperty({ description: 'Category', example: 'STI', required: false })
   @IsOptional()
+  @IsString()
   category?: string;
 
-  @ApiProperty({ example: 'AT_HOME', enum: ServiceMode, description: 'Hình thức thực hiện' })
-  @IsEnum(ServiceMode)
-  selected_mode: ServiceMode;
-
-  @ApiPropertyOptional({ example: 'Nguyen Van A', description: 'Tên người nhận (bắt buộc cho AT_HOME)' })
-  @ValidateIf((o) => o.selected_mode === ServiceMode.AT_HOME)
+  @ApiProperty({ description: 'Service mode (AT_HOME or AT_CLINIC)', example: 'AT_HOME' })
   @IsString()
-  contact_name?: string;
+  @IsNotEmpty()
+  selected_mode: string;
 
-  @ApiPropertyOptional({ example: '0909123456', description: 'Số điện thoại liên hệ (bắt buộc cho AT_HOME)' })
-  @ValidateIf((o) => o.selected_mode === ServiceMode.AT_HOME)
+  @ApiProperty({ description: 'Contact name for shipping', example: 'phuonghoang' })
   @IsString()
-  contact_phone?: string;
+  @IsNotEmpty()
+  contact_name: string;
 
-  @ApiPropertyOptional({ example: '123 Nguyen Van A, Q1', description: 'Địa chỉ nhận kit (bắt buộc cho AT_HOME)' })
-  @ValidateIf((o) => o.selected_mode === ServiceMode.AT_HOME)
+  @ApiProperty({ description: 'Contact phone for shipping', example: '0938982777' })
   @IsString()
-  shipping_address?: string;
+  @Matches(/^[0-9]{10}$/, { message: 'Phone number must be 10 digits starting with 0' })
+  contact_phone: string;
 
-  @ApiPropertyOptional({ example: 'TP.HCM', description: 'Tỉnh/Thành phố (bắt buộc cho AT_HOME)' })
-  @ValidateIf((o) => o.selected_mode === ServiceMode.AT_HOME)
+  @ApiProperty({ description: 'Shipping address', example: '01 Lê Lai, Quận Tân Bình, TP.HCM' })
   @IsString()
-  province?: string;
+  @IsNotEmpty()
+  shipping_address: string;
 
-  @ApiPropertyOptional({ example: 'Quận 1', description: 'Quận/Huyện (bắt buộc cho AT_HOME)' })
-  @ValidateIf((o) => o.selected_mode === ServiceMode.AT_HOME)
+  @ApiProperty({ description: 'Province', example: 'Hồ Chí Minh' })
   @IsString()
-  district?: string;
+  @IsNotEmpty()
+  province: string;
 
-  @ApiPropertyOptional({ example: 'Phường 1', description: 'Phường/Xã (bắt buộc cho AT_HOME)' })
-  @ValidateIf((o) => o.selected_mode === ServiceMode.AT_HOME)
+  @ApiProperty({ description: 'District name', example: 'Tân Bình' })
   @IsString()
-  ward?: string;
+  @IsNotEmpty()
+  district: string;
+
+  @ApiProperty({ description: 'Ward name', example: 'Phường 12' })
+  @IsString()
+  @IsNotEmpty()
+  ward: string;
 }

@@ -216,46 +216,49 @@ export class QuestionsService {
       message: 'Lấy danh sách câu hỏi thành công',
     };
   }
-  async getAssignedQuestions(userId: string) {
-    const consultant = await this.prisma.consultantProfile.findFirst({
-      where: { user_id: userId },
-    });
-    if (!consultant) {
-      this.logger.warn(`Không tìm thấy hồ sơ tư vấn viên cho userId: ${userId}`);
-      throw new NotFoundException('Tư vấn viên không tìm thấy');
-    }
+ async getAssignedQuestions(userId: string) {
+  const consultant = await this.prisma.consultantProfile.findFirst({
+    where: { user_id: userId },
+  });
+  if (!consultant) {
+    this.logger.warn(`Không tìm thấy hồ sơ tư vấn viên cho userId: ${userId}`);
+    throw new NotFoundException('Tư vấn viên không tìm thấy');
+  }
 
-    const questions = await this.prisma.question.findMany({
-      where: { consultant_id: consultant.consultant_id, deleted_at: null },
-      include: {
-        user: { select: { user_id: true, full_name: true, email: true } },
-      },
-      orderBy: { created_at: 'desc' },
-    });
+  const questions = await this.prisma.question.findMany({
+    where: { consultant_id: consultant.consultant_id, deleted_at: null },
+    include: {
+      user: { select: { user_id: true, full_name: true, email: true } },
+    },
+    orderBy: { created_at: 'desc' },
+  });
 
-    if (questions.length === 0) {
-      this.logger.warn(`Không tìm thấy câu hỏi nào được gán cho consultant_id: ${consultant.consultant_id}`);
-      throw new NotFoundException('Không có câu hỏi nào được gán');
-    }
-
+  if (questions.length === 0) {
+    this.logger.warn(`Không tìm thấy câu hỏi nào được gán cho consultant_id: ${consultant.consultant_id}`);
     return {
-      questions: questions.map(q => ({
-        question_id: q.question_id,
-        title: q.title,
-        content: q.content,
-        status: q.status,
-        category: q.category,
-        answer: q.answer,
-        image_url: q.image_url,
-        consultant_id: q.consultant_id,
-        user_id: q.user.user_id,
-        user_full_name: q.user.full_name,
-        user_email: q.user.email,
-        user: { user_id: q.user.user_id, full_name: q.user.full_name },
-      })),
-      message: 'Lấy danh sách câu hỏi được gán thành công',
+      questions: [],
+      message: 'Không có câu hỏi nào được gán',
     };
   }
+
+  return {
+    questions: questions.map(q => ({
+      question_id: q.question_id,
+      title: q.title,
+      content: q.content,
+      status: q.status,
+      category: q.category,
+      answer: q.answer,
+      image_url: q.image_url,
+      consultant_id: q.consultant_id,
+      user_id: q.user.user_id,
+      user_full_name: q.user.full_name,
+      user_email: q.user.email,
+      user: { user_id: q.user.user_id, full_name: q.user.full_name },
+    })),
+    message: 'Lấy danh sách câu hỏi được gán thành công',
+  };
+}
   async getQuestionById(questionId: string, userId: string, role: Role) {
     const question = await this.prisma.question.findUnique({
       where: { question_id: questionId, deleted_at: null },

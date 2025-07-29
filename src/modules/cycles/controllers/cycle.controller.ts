@@ -76,4 +76,5 @@ export class CycleController {
     const userId = (req.user as any).userId;
     return this.cycleService.getAnalytics(userId, timeRange);
   }
+
 }

@@ -364,7 +364,6 @@ model TestResult {
   deleted_at     DateTime?
   status_history TestResultStatusHistory[] // Quan hệ ngược
   viewed_at      DateTime?
-
   @@index([status])
   @@index([viewed_at])
   @@index([status, created_at]) 
@@ -444,7 +443,6 @@ model BlogPost {
   updated_at       DateTime      @updatedAt
   deleted_at       DateTime?
   comments         BlogComment[] @relation("BlogPostComments") // Quan hệ 1-nhiều với BlogComment, đặt tên quan hệ
-
   @@index([category, is_published])
 }
 

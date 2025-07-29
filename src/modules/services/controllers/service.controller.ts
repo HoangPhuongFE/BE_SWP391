@@ -11,7 +11,7 @@ import { Public } from '../../auth/decorators/public.decorator';
 @ApiTags('Services')
 @Controller('services')
 export class ServiceController {
-  constructor(private readonly serviceService: ServiceService) {}
+  constructor(private readonly serviceService: ServiceService) { }
 
   /**
    * Tạo dịch vụ mới (chỉ MANAGER).

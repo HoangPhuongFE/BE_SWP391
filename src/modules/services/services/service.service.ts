@@ -204,13 +204,48 @@ export class ServiceService {
     });
   }
 
-  async getServices(category?: string, isActive?: boolean) {
-    const where: any = { deleted_at: null };
-    if (category) where.category = category;
-    if (isActive !== undefined) where.is_active = isActive;
+async getServices(category?: string, isActive?: boolean) {
+  const where: any = { deleted_at: null };
+  if (category) where.category = category;
+  if (isActive !== undefined) where.is_active = isActive;
 
-    return this.prisma.service.findMany({ where });
-  }
+  const services = await this.prisma.service.findMany({
+    where,
+    include: {
+      schedules: {
+        where: { deleted_at: null },
+        select: {
+          consultant_id: true,
+          consultant: {
+            select: {
+              user: { select: { full_name: true, email: true } },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  return services.map(service => ({
+    service_id: service.service_id,
+    name: service.name,
+    description: service.description,
+    price: service.price,
+    category: service.category,
+    is_active: service.is_active,
+    type: service.type,
+    testing_hours: service.testing_hours,
+    daily_capacity: service.daily_capacity,
+    return_address: service.return_address,
+    return_phone: service.return_phone,
+    available_modes: service.available_modes,
+    consultants: service.schedules.map(schedule => ({
+      consultant_id: schedule.consultant_id,
+      full_name: schedule.consultant?.user?.full_name,
+      email: schedule.consultant?.user?.email,
+    })),
+  }));
+}
 
   async getServiceById(serviceId: string, date?: string) {
     const service = await this.prisma.service.findUnique({

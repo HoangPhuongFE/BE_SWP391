@@ -3,6 +3,7 @@ import PayOS from '@payos/node';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { CreatePaymentDto } from '../dtos/create-payment.dto';
+import { AppointmentStatus, NotificationStatus, NotificationType, PaymentStatus, PaymentTransactionStatus } from '@prisma/client';
 
 @Injectable()
 export class PaymentService {
@@ -78,42 +79,81 @@ export class PaymentService {
 
   /** Xử lý callback từ PayOS */
   async processPaymentCallback(payload: any) {
-    this.logger.log('Callback payload:', JSON.stringify(payload));
+  this.logger.log('Callback payload:', JSON.stringify(payload));
 
-    const raw = payload.data?.orderCode ?? payload.data?.order_code;
-    const orderCode = Number(raw);
-    if (isNaN(orderCode)) return;
-
-    const payment = await this.prisma.payment.findUnique({
-      where: { order_code: orderCode },
-      include: { appointment: true },
-    });
-    if (!payment) {
-      this.logger.warn(`Không tìm thấy Payment orderCode=${orderCode}`);
-      return;
-    }
-
-    // Xác định success
-    const isSuccess =
-      payload.success === true ||
-      payload.code === '00' ||
-      payload.data?.code === '00';
-
-    // Cập nhật payment.status
-    await this.prisma.payment.update({
-      where: { order_code: orderCode },
-      data: { status: isSuccess ? 'Completed' : 'Failed' },
-    });
-
-    // Nếu thành công, chỉ update appointment.payment_status
-    if (isSuccess) {
-      await this.prisma.appointment.update({
-        where: { appointment_id: payment.appointment_id },
-        data: { payment_status: 'Paid' },
-      });
-      this.logger.log(`Payment success orderCode=${orderCode}, appointment.payment_status=Paid`);
-    } else {
-      this.logger.log(`Payment failed orderCode=${orderCode}`);
-    }
+  const raw = payload.data?.orderCode ?? payload.data?.order_code;
+  const orderCode = Number(raw);
+  if (isNaN(orderCode)) {
+    this.logger.warn('OrderCode không hợp lệ trong payload');
+    throw new BadRequestException('OrderCode không hợp lệ');
   }
+
+  const payment = await this.prisma.payment.findUnique({
+    where: { order_code: orderCode },
+    include: { appointment: { select: { appointment_id: true, status: true, schedule_id: true, user_id: true } } },
+  });
+  if (!payment) {
+    this.logger.warn(`Không tìm thấy Payment orderCode=${orderCode}`);
+    throw new BadRequestException('Thanh toán không tồn tại');
+  }
+  if (payment.appointment.status === AppointmentStatus.Cancelled) {
+    this.logger.warn(`Lịch hẹn đã bị hủy: appointment_id=${payment.appointment_id}`);
+    throw new BadRequestException('Lịch hẹn đã bị hủy');
+  }
+
+  const isSuccess = payload.success === true || payload.code === '00' || payload.data?.code === '00';
+
+  const SYSTEM_USER_ID = '550e8400-e29b-41d4-a716-446655440000';
+  await this.prisma.$transaction(async (tx) => {
+    // Cập nhật payment.status
+    await tx.payment.update({
+      where: { order_code: orderCode },
+      data: { status: isSuccess ? PaymentTransactionStatus.Completed : PaymentTransactionStatus.Failed },
+    });
+
+    // Cập nhật appointment
+    await tx.appointment.update({
+      where: { appointment_id: payment.appointment_id },
+      data: {
+        payment_status: isSuccess ? PaymentStatus.Paid : PaymentStatus.Failed,
+        status: isSuccess ? AppointmentStatus.Confirmed : AppointmentStatus.Cancelled,
+      },
+    });
+
+    // Ghi lịch sử trạng thái
+    await tx.appointmentStatusHistory.create({
+      data: {
+        appointment_id: payment.appointment_id,
+        status: isSuccess ? AppointmentStatus.Confirmed : AppointmentStatus.Cancelled,
+        notes: isSuccess ? 'Xác nhận lịch hẹn sau thanh toán' : 'Hủy do thanh toán thất bại',
+        changed_by: SYSTEM_USER_ID,
+      },
+    });
+
+    // Cập nhật schedule nếu thành công
+    if (isSuccess && payment.appointment.schedule_id) {
+      await tx.schedule.update({
+        where: { schedule_id: payment.appointment.schedule_id },
+        data: { is_booked: true },
+      });
+    }
+
+    // Gửi thông báo
+    await tx.notification.create({
+      data: {
+        user_id: payment.appointment.user_id,
+        type: NotificationType.Email,
+        title: isSuccess ? 'Lịch hẹn đã được xác nhận' : 'Lịch hẹn đã bị hủy',
+        content: isSuccess
+          ? `Lịch hẹn ${payment.appointment_id} đã được xác nhận sau khi thanh toán thành công.`
+          : `Lịch hẹn ${payment.appointment_id} đã bị hủy do thanh toán thất bại.`,
+        status: NotificationStatus.Pending,
+      },
+    });
+  });
+
+  this.logger.log(`Processed payment callback: orderCode=${orderCode}, success=${isSuccess}`);
+}
+
+
 }

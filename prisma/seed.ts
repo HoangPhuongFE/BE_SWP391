@@ -1,6 +1,8 @@
 
-import { PrismaClient, Role, Gender, AppointmentType, AppointmentStatus, PaymentStatus, TestResultStatus, FeedbackStatus, ServiceType, ServiceMode,
-   ShippingStatus, PaymentMethod, PaymentTransactionStatus, NotificationType, NotificationStatus, Prisma } from '@prisma/client';
+import {
+  PrismaClient, Role, Gender, AppointmentType, AppointmentStatus, PaymentStatus, TestResultStatus, FeedbackStatus, ServiceType, ServiceMode,
+  ShippingStatus, PaymentMethod, PaymentTransactionStatus, NotificationType, NotificationStatus, Prisma
+} from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
@@ -291,7 +293,7 @@ async function main() {
       price: 25000,
       category: 'General',
       type: ServiceType.Consultation,
-      available_modes: [ ServiceMode.AT_CLINIC, ServiceMode.ONLINE],
+      available_modes: [ServiceMode.AT_CLINIC, ServiceMode.ONLINE],
     },
   ];
 
@@ -551,8 +553,28 @@ async function main() {
       const startTime = new Date(2025, 6, 21 + (i % 5), 9 + (i % 3), 0);
       const isFree = i < 2 && testingAppointments.length > i;
       const relatedAppt = isFree ? testingAppointments[i] : null;
-      const mode = Array.isArray(service.available_modes) ? service.available_modes[Math.floor(Math.random() * service.available_modes.length)] as ServiceMode : ServiceMode.AT_CLINIC;
-      const payment_status = isFree || status === AppointmentStatus.Completed || status === AppointmentStatus.InProgress ? PaymentStatus.Paid : status === AppointmentStatus.Cancelled ? PaymentStatus.Failed : PaymentStatus.Pending;
+      const mode = Array.isArray(service.available_modes)
+        ? service.available_modes[Math.floor(Math.random() * service.available_modes.length)] as ServiceMode
+        : ServiceMode.AT_CLINIC;
+
+      // Đúng logic payment_status
+      let payment_status: PaymentStatus;
+      if (isFree) {
+        payment_status = PaymentStatus.Paid;
+      } else if (status === AppointmentStatus.Completed || status === AppointmentStatus.InProgress || status === AppointmentStatus.Confirmed) {
+        payment_status = PaymentStatus.Paid;
+      } else if (status === AppointmentStatus.Cancelled) {
+        payment_status = PaymentStatus.Failed;
+      } else {
+        payment_status = PaymentStatus.Pending;
+      }
+
+      // Đúng logic meeting_link
+      let meeting_link: string | null = null;
+      if (mode === ServiceMode.ONLINE &&
+        (status === AppointmentStatus.Confirmed || status === AppointmentStatus.InProgress || status === AppointmentStatus.Completed)) {
+        meeting_link = `https://meet.google.com/test-${Math.floor(Math.random() * 1000)}`;
+      }
 
       const schedule = await tx.schedule.findFirst({
         where: {
@@ -579,7 +601,7 @@ async function main() {
           schedule_id: schedule?.schedule_id,
           related_appointment_id: isFree ? relatedAppt?.appointment_id : null,
           mode,
-          meeting_link: mode === ServiceMode.ONLINE ? `https://meet.google.com/test-${Math.floor(Math.random() * 1000)}` : null,
+          meeting_link,
           consultation_notes: status === AppointmentStatus.Completed ? 'Buổi tư vấn hoàn tất với kết quả tốt' : null,
         },
       });
@@ -592,7 +614,7 @@ async function main() {
       }
 
       if (!isFree && status !== AppointmentStatus.Cancelled) {
-        const orderCode = Math.floor(10000000 + Math.random() * 90000000); // Tạo số 8 chữ số
+        const orderCode = Math.floor(10000000 + Math.random() * 90000000);
 
         // Kiểm tra trùng lặp order_code
         const existingPayment = await tx.payment.findUnique({
@@ -609,7 +631,9 @@ async function main() {
             user_id: customer.user_id,
             amount: service.price,
             payment_method: PaymentMethod.BankCard,
-            status: status === AppointmentStatus.Completed || status === AppointmentStatus.InProgress ? PaymentTransactionStatus.Completed : PaymentTransactionStatus.Pending,
+            status: payment_status === PaymentStatus.Paid
+              ? PaymentTransactionStatus.Completed
+              : PaymentTransactionStatus.Pending,
             order_code: orderCode,
           },
         });

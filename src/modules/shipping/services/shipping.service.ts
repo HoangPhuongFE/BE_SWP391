@@ -1,165 +1,128 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { PrismaService } from '../../../prisma/prisma.service';
-import { HttpService } from '@nestjs/axios';
-import { firstValueFrom } from 'rxjs';
-import { CreateOrderDto } from '../dtos/create-order.dto';
-import { validate } from 'class-validator';
-import { CreateOrderInput, GhnService } from './ghn.service';
-import { ShippingStatus } from '@prisma/client';
-
-
-
+import { Injectable } from '@nestjs/common'
+import { PrismaService } from '../../../prisma/prisma.service'
+import { GhnService } from './ghn.service'
+import { ShippingStatus } from '../enums/shipping-status.enum'
 
 @Injectable()
 export class ShippingService {
-  // Mapping tên quận/huyện song ngữ + mã trực tiếp
-  private readonly districtMapping: Record<string, string> = {
-    'quận 1': '1442', 'quan 1': '1442', 'district 1': '1442',
-    'Tân Bình': '1455', 'tan binh': '1455', 'quan tan binh': '1455',
-    // Thêm các mapping khác nếu cần
-  };
-
-  private readonly wardMapping: Record<string, Record<string, string>> = {
-    '1442': {
-      'phường 1': '20101', 'phuong 1': '20101', 'ngọc hà': '20102', 'ngoc ha': '20102',
-      // ... các phường Quận 1 khác
-    },
-    '1455': {
-      'phường 12': '20121', 'phuong 12': '20121',
-      // ... các phường Quận Tân Bình khác
-    },
-    // ... mapping cho các quận còn lại
-  };
-
   constructor(
     private readonly prisma: PrismaService,
     private readonly ghnService: GhnService,
-  ) {}
+  ) { }
 
-  /**
-   * Tạo đơn GHN cho một appointment đã có shipping_info
-   */
+  //  async createOrderForAppointment(appointmentId: string) {
+  //   const appointment = await this.prisma.appointment.findUnique({
+  //     where: { appointment_id: appointmentId },
+  //     include: { shipping_info: true },
+  //   });
+
+  //   if (!appointment?.shipping_info) return null;
+
+  //   const info = appointment.shipping_info;
+
+  //   const from = {
+  //     name: 'Phòng Lab ABC',
+  //     phone: '0938982776',
+  //     address: '123 Pasteur, Q1, TP.HCM',
+  //     district_id: process.env.GHN_FROM_DISTRICT
+  //       ? +process.env.GHN_FROM_DISTRICT
+  //       : (() => {
+  //           throw new Error('GHN_FROM_DISTRICT env variable is not set');
+  //         })(),
+  //     ward_code:
+  //       process.env.GHN_FROM_WARD ??
+  //       (() => {
+  //         throw new Error('GHN_FROM_WARD env variable is not set');
+  //       })(),
+  //   };
+
+  //   let ghnData: any;
+  //   try {
+  //     ghnData = await this.ghnService.createOrder({
+  //       from_name: from.name,
+  //       from_phone: from.phone,
+  //       from_address: from.address,
+  //       from_district_id: from.district_id,
+  //       from_ward_code: from.ward_code,
+
+  //       to_name: info.contact_name,
+  //       to_phone: info.contact_phone,
+  //       to_address: info.shipping_address,
+  //       to_district_id: parseInt(info.district),
+  //       to_ward_code: info.ward,
+  //       client_order_code: appointmentId,
+  //     });
+  //   } catch (error: any) {
+  //     // ❗ THAY ĐOẠN FALLBACK MOCK BẰNG LỆNH THROW
+  //     console.error('GHN lỗi:', error?.response?.data || error.message);
+  //     throw new Error(
+  //       `Không thể tạo đơn hàng GHN: ${error?.response?.data?.code_message_value || error.message}`
+  //     );
+  //   }
+
+  //   await this.prisma.shippingInfo.update({
+  //     where: { id: info.id },
+  //     data: {
+  //       provider: 'GHN',
+  //       provider_order_code: ghnData.order_code,
+  //       shipping_status: ShippingStatus.Shipped,
+  //       expected_delivery_time: ghnData.expected_delivery_time
+  //         ? new Date(ghnData.expected_delivery_time)
+  //         : undefined,
+  //       label_url: ghnData.label || null,
+  //     },
+  //   });
+
+  //   return {
+  //     message: 'Tạo đơn GHN chiều đi thành công',
+  //     order_code: ghnData.order_code,
+  //     expected_delivery_time: ghnData.expected_delivery_time,
+  //   };
+  // }
+
   async createOrderForAppointment(appointmentId: string) {
-    // 1. Lấy appointment + shipping_info
     const appointment = await this.prisma.appointment.findUnique({
       where: { appointment_id: appointmentId },
       include: { shipping_info: true },
-    });
-    if (!appointment) {
-      throw new NotFoundException(`Không tìm thấy lịch hẹn với ID: ${appointmentId}`);
-    }
-    const info = appointment.shipping_info;
-    if (!info) {
-      throw new NotFoundException(`Không tìm thấy thông tin vận chuyển cho lịch hẹn: ${appointmentId}`);
-    }
+    })
 
-    // 2. Xác định districtId (hỗ trợ cả mã và tên nhiều ngôn ngữ)
-    const rawDistrict = info.district;
-    const dk = rawDistrict.toLowerCase().trim();
-    let districtId: string;
-    if (/^[0-9]+$/.test(rawDistrict)) {
-      districtId = rawDistrict;
-    } else if (this.districtMapping[dk]) {
-      districtId = this.districtMapping[dk];
-    } else {
-      throw new BadRequestException(`Quận/huyện không hợp lệ: ${rawDistrict}`);
-    }
+    if (!appointment?.shipping_info) return null
 
-    // 3. Xác định wardCode tương ứng
-    const rawWard = info.ward;
-    const wk = rawWard.toLowerCase().trim();
-    let wardCode: string;
-    if (/^[0-9]+$/.test(rawWard)) {
-      wardCode = rawWard;
-    } else if (this.wardMapping[districtId]?.[wk]) {
-      wardCode = this.wardMapping[districtId][wk];
-    } else {
-      throw new BadRequestException(`Phường/xã không hợp lệ: ${rawWard}`);
-    }
+    const info = appointment.shipping_info
 
-    // 4. Chuẩn bị thông tin người gửi (hardcode hoặc config env)
     const from = {
       name: 'Phòng Lab ABC',
       phone: '0938982776',
       address: '123 Pasteur, Q1, TP.HCM',
-      district_id: +(process.env.GHN_FROM_DISTRICT || 1442),
-      ward_code: process.env.GHN_FROM_WARD || '20101',
-    };
+      district_id: process.env.GHN_FROM_DISTRICT ? +process.env.GHN_FROM_DISTRICT : (() => { throw new Error('GHN_FROM_DISTRICT env variable is not set'); })(),
+      ward_code: process.env.GHN_FROM_WARD ?? (() => { throw new Error('GHN_FROM_WARD env variable is not set'); })(),
+    }
 
-    // 5. Xây payload CreateOrderInput
-    const orderInput: CreateOrderInput = {
-      from_name: from.name,
-      from_phone: from.phone,
-      from_address: from.address,
-      from_district_id: from.district_id,
-      from_ward_code: from.ward_code,
-      from_ward_name: 'Phường Bến Nghé',
-      from_district_name: 'Quận 1',
-      from_province_name: 'Hồ Chí Minh',
-      to_name: info.contact_name,
-      to_phone: info.contact_phone,
-      to_address: info.shipping_address,
-      to_district_id: +districtId,
-      to_ward_code: wardCode,
-      to_ward_name: info.ward,
-      to_district_name: info.district,
-      to_province_name: 'Hồ Chí Minh',
-      return_phone: from.phone,
-      return_address: from.address,
-      return_district_id: from.district_id,
-      return_ward_code: from.ward_code,
-      client_order_code: appointmentId,
-      service_id: 53321,
-      service_type_id: 2,
-      payment_type_id: 2,
-      required_note: 'KHONGCHOXEMHANG',
-      cod_amount: 0,
-      content: 'Bộ kit xét nghiệm',
-      weight: 500,
-      length: 10,
-      width: 10,
-      height: 5,
-      insurance_value: 1000000,
-      items: [
-        {
-          name: 'Bộ kit xét nghiệm',
-          code: 'KIT123',
-          quantity: 1,
-          price: 200000,
-          length: 10,
-          width: 10,
-          height: 5,
-          weight: 500,
-          category: { level1: 'Y tế' },
-        },
-      ],
-    };
+    let ghnData: any
+    try {
+      ghnData = await this.ghnService.createOrder({
+        from_name: from.name,
+        from_phone: from.phone,
+        from_address: from.address,
+        from_district_id: from.district_id,
+        from_ward_code: from.ward_code,
 
-    // 6. Gọi GHN với retry exponential back-off + jitter
-    let ghnData: any;
-    const maxRetries = 15;
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        ghnData = await this.ghnService.createOrder(orderInput);
-        break;
-      } catch (err) {
-        const msg = err?.message || '';
-        if (msg.includes('quá tải') && attempt < maxRetries) {
-          const backoff = Math.pow(2, attempt) * 1000 + Math.random() * 1000;
-          await new Promise(r => setTimeout(r, backoff));
-          continue;
-        }
-        // Fallback mock
-        ghnData = {
-          order_code: `MOCK-GHN-${Date.now()}`,
-          expected_delivery_time: new Date().toISOString(),
-          label: null,
-        };
-        break;
+        to_name: info.contact_name,
+        to_phone: info.contact_phone,
+        to_address: info.shipping_address,
+        to_district_id: parseInt(info.district),
+        to_ward_code: info.ward,
+        client_order_code: appointmentId,
+      })
+    } catch (error) {
+      console.warn('GHN lỗi:', error.message)
+      ghnData = {
+        order_code: 'MOCK-GHN-' + Date.now(),
+        expected_delivery_time: new Date().toISOString(),
+        label: null,
       }
     }
 
-    // 7. Cập nhật lại shipping_info
     await this.prisma.shippingInfo.update({
       where: { id: info.id },
       data: {
@@ -169,13 +132,14 @@ export class ShippingService {
         expected_delivery_time: ghnData.expected_delivery_time ? new Date(ghnData.expected_delivery_time) : undefined,
         label_url: ghnData.label || null,
       },
-    });
+    })
 
-    return { message: 'Tạo đơn GHN thành công', order_code: ghnData.order_code, expected_delivery_time: ghnData.expected_delivery_time };
+    return {
+      message: 'Tạo đơn GHN chiều đi thành công',
+      order_code: ghnData.order_code,
+      expected_delivery_time: ghnData.expected_delivery_time,
+    }
   }
-
-
-
   async getByAppointmentId(appointmentId: string) {
     const outbound = await this.prisma.shippingInfo.findUnique({
       where: { appointment_id: appointmentId },

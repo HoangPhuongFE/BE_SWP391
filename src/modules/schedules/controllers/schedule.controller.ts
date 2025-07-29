@@ -88,18 +88,13 @@ export class ScheduleController {
     return this.scheduleService.getScheduleById(scheduleId);
   }
 
-  /**
-   * Manager xem lịch trống của Consultant.
-   * - FE cần: Giao diện danh sách lịch trống của Consultant với consultantId.
-   * - Gửi GET request với consultantId trong URL.
-   * - Trả về: Danh sách lịch trống của Consultant (JSON array, bao gồm tên dịch vụ).
-   */
+  
   @Get('consultants/:consultantId')
-  @Roles(Role.Manager)
+  @Roles(Role.Manager, Role.Staff)
   @UseGuards(AuthGuard('jwt'))
   @ApiOperation({
-    summary: 'Manager xem lịch trống của Consultant',
-    description: 'Trả về tất cả lịch trống của Consultant với consultantId. FE hiển thị danh sách lịch.',
+    summary: 'Manager và Staff xem lịch  của Consultant',
+    description: 'Trả về tất cả lịch của Consultant. FE hiển thị danh sách lịch.',
   })
   @ApiBearerAuth('access-token')
   @ApiParam({ name: 'consultantId', description: 'ID Consultant' })

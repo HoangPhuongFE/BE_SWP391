@@ -127,12 +127,12 @@ export class ScheduleService {
 
 
 
-  async getAllSchedules(consultantId: string) {
-    return this.prisma.schedule.findMany({
-      where: { consultant_id: consultantId, deleted_at: null },
-      include: { service: { select: { name: true } } },
-    });
-  }
+    async getAllSchedules(consultantId: string) {
+      return this.prisma.schedule.findMany({
+        where: { consultant_id: consultantId, deleted_at: null },
+        include: { service: { select: { name: true } } },
+      });
+    }
 
   async getScheduleById(scheduleId: string) {
     const schedule = await this.prisma.schedule.findUnique({

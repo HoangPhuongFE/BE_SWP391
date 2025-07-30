@@ -1,6 +1,6 @@
 import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
-import { CreateServiceDto ,ServiceMode  } from '../dtos/create-service.dto';
+import { CreateServiceDto, ServiceMode } from '../dtos/create-service.dto';
 import { UpdateServiceDto } from '../dtos/update-service.dto';
 import { ServiceType } from '@prisma/client';
 
@@ -31,7 +31,7 @@ export class ServiceService {
     // --- 1. Validate available_modes theo type ---
     if (available_modes && available_modes.length > 0) {
       const allowedForConsult: ServiceMode[] = [ServiceMode.AT_CLINIC, ServiceMode.ONLINE];
-      const allowedForTest:    ServiceMode[] = [ServiceMode.AT_HOME,    ServiceMode.AT_CLINIC];
+      const allowedForTest: ServiceMode[] = [ServiceMode.AT_HOME, ServiceMode.AT_CLINIC];
       const allowed = type === ServiceType.Consultation ? allowedForConsult : allowedForTest;
 
       const invalidModes = available_modes.filter(m => !allowed.includes(m));
@@ -53,11 +53,14 @@ export class ServiceService {
 
     // --- 3. Với Testing hoặc có AT_HOME thì return_address & return_phone bắt buộc ---
     if (type === ServiceType.Testing || (available_modes ?? []).includes(ServiceMode.AT_HOME)) {
-      if (!return_address) {
-        errors.push({ field: 'return_address', message: 'Địa chỉ nhận mẫu là bắt buộc' });
+      if (return_phone && !/^(\d{10}|\d{11})$/.test(return_phone)) {
+        errors.push({ field: 'return_phone', message: 'Số điện thoại phải có 10 hoặc 11 chữ số' });
       }
-      if (!return_phone) {
-        errors.push({ field: 'return_phone', message: 'Số điện thoại nhận mẫu là bắt buộc' });
+      if (return_address) {
+        const wordCount = return_address.trim().split(/\s+/).length;
+        if (wordCount < 5 || wordCount > 200) {
+          errors.push({ field: 'return_address', message: 'Địa chỉ phải từ 5 đến 200 từ' });
+        }
       }
     }
 
@@ -143,21 +146,25 @@ export class ServiceService {
     const newType = dto.type ?? service.type;
     const updatedModes = dto.available_modes ?? (service.available_modes as ServiceMode[] ?? []);
     const mergedAddress = dto.return_address ?? service.return_address ?? 'Không áp dụng';
-    const mergedPhone   = dto.return_phone   ?? service.return_phone   ?? 'Không áp dụng';
+    const mergedPhone = dto.return_phone ?? service.return_phone ?? 'Không áp dụng';
 
     if (newType === ServiceType.Testing || updatedModes.includes(ServiceMode.AT_HOME)) {
-      if (!mergedAddress || mergedAddress === 'Không áp dụng') {
-        errors.push({ field: 'return_address', message: 'Địa chỉ nhận mẫu là bắt buộc' });
+      if (mergedPhone && !/^(\d{10}|\d{11})$/.test(mergedPhone)) {
+        errors.push({ field: 'return_phone', message: 'Số điện thoại phải có 10 hoặc 11 chữ số' });
       }
-      if (!mergedPhone || mergedPhone === 'Không áp dụng') {
-        errors.push({ field: 'return_phone', message: 'Số điện thoại nhận mẫu là bắt buộc' });
+      if (mergedAddress) {
+        const wordCount = mergedAddress.trim().split(/\s+/).length;
+        if (wordCount < 5 || wordCount > 200) {
+          errors.push({ field: 'return_address', message: 'Địa chỉ phải từ 5 đến 200 từ' });
+        }
       }
+
     }
 
     // --- 4. Validate available_modes theo newType ---
     if (updatedModes && updatedModes.length > 0) {
       const allowedForConsult: ServiceMode[] = [ServiceMode.AT_CLINIC, ServiceMode.ONLINE];
-      const allowedForTest:    ServiceMode[] = [ServiceMode.AT_HOME,    ServiceMode.AT_CLINIC];
+      const allowedForTest: ServiceMode[] = [ServiceMode.AT_HOME, ServiceMode.AT_CLINIC];
       const allowed = newType === ServiceType.Consultation ? allowedForConsult : allowedForTest;
 
       const invalidModes = updatedModes.filter(m => !allowed.includes(m));

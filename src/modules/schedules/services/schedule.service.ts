@@ -531,7 +531,7 @@ export class ScheduleService {
   //   };
   // }
 
-async batchCreateSchedules(
+  async batchCreateSchedules(
   consultantId: string,
   dto: BatchCreateScheduleDto
 ) {
@@ -544,23 +544,25 @@ async batchCreateSchedules(
   const LUNCH_BREAK_START = { hour: 11, min: 30 };
   const LUNCH_BREAK_END = { hour: 13, min: 30 };
   const WORK_START = { hour: 8, min: 0 };
-  const WORK_END = { hour: 17, min: 30 }; // Cho phép kết thúc muộn nhất 17:30
-  const WORKING_DAYS = [1,2,3,4,5,6]; // Thứ 2 -> Thứ 7
+  const WORK_END = { hour: 17, min: 30 }; // Kết thúc muộn nhất 17:30
+  const WORKING_DAYS = [1, 2, 3, 4, 5, 6]; // Thứ 2 -> Thứ 7
 
-  // Hàm tính slot/ngày
-  function calcSlotsPerDay(duration_minutes: number, break_minutes = 30): number {
-    const workingMinutesPerDay = (WORK_END.hour*60 + WORK_END.min) - (WORK_START.hour*60 + WORK_START.min) - 120; // 120 phút nghỉ trưa
-    const slotTotal = duration_minutes + break_minutes;
-    return Math.floor(workingMinutesPerDay / slotTotal);
+  // CẤU HÌNH SỐ SLOT CỨNG
+  let MAX_PER_DAY = 0;
+  if (duration_minutes === 60) {
+    MAX_PER_DAY = 6;
+  } else if (duration_minutes === 90) {
+    MAX_PER_DAY = 4;
+  } else {
+    // fallback: tính động như cũ nếu cần cho các case khác
+    const workingMinutesPerDay = (WORK_END.hour * 60 + WORK_END.min) - (WORK_START.hour * 60 + WORK_START.min) - 120; // 120 phút nghỉ trưa
+    const slotTotal = duration_minutes + BREAK_MINUTES;
+    MAX_PER_DAY = Math.floor(workingMinutesPerDay / slotTotal);
   }
-  // Hàm tính slot/tuần
-  function calcSlotsPerWeek(duration_minutes: number, break_minutes = 30, workingDays = 6): number {
-    return calcSlotsPerDay(duration_minutes, break_minutes) * workingDays;
-  }
-  const MAX_PER_DAY = calcSlotsPerDay(duration_minutes, BREAK_MINUTES);
-  const MAX_PER_WEEK = calcSlotsPerWeek(duration_minutes, BREAK_MINUTES, 6);
+  // Số slot/tuần
+  const MAX_PER_WEEK = MAX_PER_DAY * 6;
 
-  // Kiểm tra đầu vào như cũ
+  // Validate đầu vào
   const start = new Date(start_time);
   const end = new Date(end_time);
   const now = new Date();
@@ -593,11 +595,11 @@ async batchCreateSchedules(
 
   // Xác định tuần đầu tiên cần tạo (tính từ start)
   const weekStart = new Date(start);
-  weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7)); // về thứ 2 tuần đó
-  weekStart.setHours(0,0,0,0);
+  weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7));
+  weekStart.setHours(0, 0, 0, 0);
   const weekEnd = new Date(weekStart);
-  weekEnd.setDate(weekEnd.getDate() + 5); // tới thứ 7
-  weekEnd.setHours(23,59,59,999);
+  weekEnd.setDate(weekEnd.getDate() + 5);
+  weekEnd.setHours(23, 59, 59, 999);
 
   // Đếm slot đã có trong tuần này
   const weeklySchedules = await this.prisma.schedule.count({
@@ -611,11 +613,19 @@ async batchCreateSchedules(
   let createdSchedules: any[] = [];
   let curDay = new Date(start);
 
+  // --- Hàm phụ kiểm tra overlap với giờ nghỉ trưa ---
+  function isSlotInLunchBreak(slotStart: Date, slotEnd: Date): boolean {
+    const slotStartMin = slotStart.getHours() * 60 + slotStart.getMinutes();
+    const slotEndMin = slotEnd.getHours() * 60 + slotEnd.getMinutes();
+    const lunchStart = LUNCH_BREAK_START.hour * 60 + LUNCH_BREAK_START.min;
+    const lunchEnd = LUNCH_BREAK_END.hour * 60 + LUNCH_BREAK_END.min;
+    // Bất kỳ slot nào bắt đầu trước 13:30 và kết thúc sau 11:30 đều overlap nghỉ trưa
+    return slotStartMin < lunchEnd && slotEndMin > lunchStart;
+  }
+
   // Duyệt từng ngày từ start đến end
   while (curDay <= end) {
-    // Chỉ tạo slot nếu là Thứ 2-7
     if (WORKING_DAYS.includes(curDay.getDay())) {
-      // Lấy giờ bắt đầu/kết thúc làm việc trong ngày hiện tại
       let slotStart = new Date(
         curDay.getFullYear(), curDay.getMonth(), curDay.getDate(),
         WORK_START.hour, WORK_START.min, 0, 0
@@ -625,7 +635,6 @@ async batchCreateSchedules(
         WORK_END.hour, WORK_END.min, 0, 0
       );
 
-      // Đếm số slot đã có trong ngày này
       const dailySchedules = await this.prisma.schedule.count({
         where: {
           consultant_id: consultantId,
@@ -637,27 +646,22 @@ async batchCreateSchedules(
       let createdToday = 0;
 
       while (
-        slotStart < dayEnd &&
         createdToday + dailySchedules < MAX_PER_DAY &&
         createdSchedules.length + weeklySchedules < MAX_PER_WEEK
       ) {
         const slotEnd = new Date(slotStart.getTime() + duration_minutes * 60 * 1000);
 
-        // Nếu slotEnd > dayEnd thì break luôn
+        // Không vượt quá 17:30
         if (slotEnd > dayEnd) break;
 
-        // Skip nếu slot rơi vào giờ nghỉ trưa
-        const isLunchBreak =
-          (slotStart.getHours()*60 + slotStart.getMinutes()) < (LUNCH_BREAK_END.hour*60 + LUNCH_BREAK_END.min) &&
-          (slotEnd.getHours()*60 + slotEnd.getMinutes()) > (LUNCH_BREAK_START.hour*60 + LUNCH_BREAK_START.min);
-
-        if (isLunchBreak) {
+        // Nếu slot rơi vào giờ nghỉ trưa thì nhảy qua 13:30
+        if (isSlotInLunchBreak(slotStart, slotEnd)) {
           slotStart.setHours(LUNCH_BREAK_END.hour, LUNCH_BREAK_END.min, 0, 0);
           continue;
         }
 
         // Kiểm tra trùng lịch hẹn/lịch trống
-        const isOverlapping = await this.prisma.$transaction([
+        const [overlappingAppointment, overlappingSchedule] = await this.prisma.$transaction([
           this.prisma.appointment.findFirst({
             where: {
               consultant_id: consultantId,
@@ -676,7 +680,7 @@ async batchCreateSchedules(
             },
           }),
         ]);
-        const [overlappingAppointment, overlappingSchedule] = isOverlapping;
+
         if (!overlappingAppointment && !overlappingSchedule) {
           const schedule = await this.prisma.schedule.create({
             data: {
@@ -689,7 +693,8 @@ async batchCreateSchedules(
           createdSchedules.push(schedule);
           createdToday++;
         }
-        // slot tiếp theo: + BREAK_MINUTES
+
+        // Slot tiếp theo: đúng 30 phút nghỉ sau mỗi slot
         slotStart = new Date(slotEnd.getTime() + BREAK_MINUTES * 60 * 1000);
       }
     }
@@ -698,7 +703,7 @@ async batchCreateSchedules(
     curDay.setHours(0, 0, 0, 0);
   }
 
-  // Thông báo như cũ
+  // Gửi thông báo nếu tạo thành công
   if (createdSchedules.length > 0) {
     await this.prisma.notification.create({
       data: {
@@ -720,4 +725,6 @@ async batchCreateSchedules(
       : 'Không tạo được lịch do trùng hoặc vượt giới hạn',
   };
 }
+
+
 }

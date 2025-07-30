@@ -398,7 +398,7 @@ CREATE TABLE `Schedule` (
     `is_booked` BOOLEAN NOT NULL DEFAULT false,
     `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `deleted_at` DATETIME(3) NULL,
-    `max_appointments_per_day` INTEGER NULL DEFAULT 5,
+    `max_appointments_per_day` INTEGER NULL DEFAULT 10,
 
     INDEX `Schedule_consultant_id_start_time_end_time_idx`(`consultant_id`, `start_time`, `end_time`),
     INDEX `Schedule_consultant_id_start_time_idx`(`consultant_id`, `start_time`),

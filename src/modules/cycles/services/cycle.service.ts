@@ -74,7 +74,7 @@ export class CycleService {
       message: 'Thiết lập chu kỳ thành công',
     };
   }
- async createCycle(userId: string, dto: CreateCycleDto) {
+  async createCycle(userId: string, dto: CreateCycleDto) {
     const { startDate, periodLength, symptoms, notes } = dto;
     const start = new Date(startDate);
     const now = new Date();
@@ -155,7 +155,7 @@ export class CycleService {
         ? 'Cập nhật chu kỳ thành công, dự đoán dựa trên giá trị mặc định'
         : 'Cập nhật chu kỳ thành công',
     };
-}
+  }
   async updateSymptoms(userId: string, cycleId: string, dto: UpdateSymptomsDto) {
     const cycle = await this.prisma.menstrualCycle.findUnique({
       where: { cycle_id: cycleId, user_id: userId, deleted_at: null },
@@ -170,7 +170,7 @@ export class CycleService {
     });
   }
 
- 
+
   async getCycles(
     userId: string,
     query: { startDate?: string; endDate?: string; limit?: number; page?: number }
@@ -309,7 +309,7 @@ export class CycleService {
           type: 'Email', 
           title: notif.title,
           content: notif.content,
-          status: 'Pending',
+          status: 'Sent',
           created_at: notif.sendAt,
         },
       });

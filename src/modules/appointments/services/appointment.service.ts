@@ -309,7 +309,7 @@ export class AppointmentService {
       date,
       session,
       location,
-      category = 'STI',
+      category,
       selected_mode,
       userId,
       contact_name,
@@ -527,7 +527,7 @@ export class AppointmentService {
           service_id: serviceId,
           result_data: 'Pending',
           status: TestResultStatus.Pending,
-          test_code: await this.generateUniqueTestCode(category),
+          test_code: await this.generateUniqueTestCode(category ?? 'TEST'),
         },
       });
 

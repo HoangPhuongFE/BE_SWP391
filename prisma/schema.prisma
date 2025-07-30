@@ -442,7 +442,7 @@ model BlogPost {
   created_at       DateTime      @default(now())
   updated_at       DateTime      @updatedAt
   deleted_at       DateTime?
-  comments         BlogComment[] @relation("BlogPostComments") // Quan hệ 1-nhiều với BlogComment, đặt tên quan hệ
+  comments         BlogComment[] @relation("BlogPostComments")
   @@index([category, is_published])
 }
 

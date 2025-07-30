@@ -531,7 +531,7 @@ export class ScheduleService {
   //   };
   // }
 
- async batchCreateSchedules(
+async batchCreateSchedules(
   consultantId: string,
   dto: BatchCreateScheduleDto
 ) {
@@ -544,12 +544,12 @@ export class ScheduleService {
   const LUNCH_BREAK_START = { hour: 11, min: 30 };
   const LUNCH_BREAK_END = { hour: 13, min: 30 };
   const WORK_START = { hour: 8, min: 0 };
-  const WORK_END = { hour: 17, min: 0 };
+  const WORK_END = { hour: 17, min: 30 }; // Cho phép kết thúc muộn nhất 17:30
   const WORKING_DAYS = [1,2,3,4,5,6]; // Thứ 2 -> Thứ 7
 
   // Hàm tính slot/ngày
   function calcSlotsPerDay(duration_minutes: number, break_minutes = 30): number {
-    const workingMinutesPerDay = 540 - 120; // 8:00-17:00 trừ nghỉ trưa 2h
+    const workingMinutesPerDay = (WORK_END.hour*60 + WORK_END.min) - (WORK_START.hour*60 + WORK_START.min) - 120; // 120 phút nghỉ trưa
     const slotTotal = duration_minutes + break_minutes;
     return Math.floor(workingMinutesPerDay / slotTotal);
   }
@@ -643,6 +643,9 @@ export class ScheduleService {
       ) {
         const slotEnd = new Date(slotStart.getTime() + duration_minutes * 60 * 1000);
 
+        // Nếu slotEnd > dayEnd thì break luôn
+        if (slotEnd > dayEnd) break;
+
         // Skip nếu slot rơi vào giờ nghỉ trưa
         const isLunchBreak =
           (slotStart.getHours()*60 + slotStart.getMinutes()) < (LUNCH_BREAK_END.hour*60 + LUNCH_BREAK_END.min) &&
@@ -652,8 +655,6 @@ export class ScheduleService {
           slotStart.setHours(LUNCH_BREAK_END.hour, LUNCH_BREAK_END.min, 0, 0);
           continue;
         }
-
-        if (slotEnd > dayEnd) break;
 
         // Kiểm tra trùng lịch hẹn/lịch trống
         const isOverlapping = await this.prisma.$transaction([
@@ -719,8 +720,4 @@ export class ScheduleService {
       : 'Không tạo được lịch do trùng hoặc vượt giới hạn',
   };
 }
-
-
-
-
 }

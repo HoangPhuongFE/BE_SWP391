@@ -531,194 +531,195 @@ export class ScheduleService {
   //   };
   // }
 
-  async batchCreateSchedules(
-    consultantId: string,
-    dto: BatchCreateScheduleDto
-  ) {
-    const {
-      start_time, end_time, duration_minutes, service_id
-    } = dto;
+ async batchCreateSchedules(
+  consultantId: string,
+  dto: BatchCreateScheduleDto
+) {
+  const {
+    start_time, end_time, duration_minutes, service_id
+  } = dto;
 
-    // HẰNG SỐ CẤU HÌNH
-    const BREAK_MINUTES = 30;
-    const LUNCH_BREAK_START = { hour: 11, min: 30 };
-    const LUNCH_BREAK_END = { hour: 13, min: 30 };
-    const WORK_START = { hour: 8, min: 0 };
-    const WORK_END = { hour: 17, min: 0 };
-    const WORKING_DAYS = [1, 2, 3, 4, 5]; // Thứ 2 -> Thứ 6
+  // HẰNG SỐ CẤU HÌNH
+  const BREAK_MINUTES = 30;
+  const LUNCH_BREAK_START = { hour: 11, min: 30 };
+  const LUNCH_BREAK_END = { hour: 13, min: 30 };
+  const WORK_START = { hour: 8, min: 0 };
+  const WORK_END = { hour: 17, min: 0 };
+  const WORKING_DAYS = [1,2,3,4,5,6]; // Thứ 2 -> Thứ 7
 
-    // Hàm tính slot/ngày
-    function calcSlotsPerDay(duration_minutes: number, break_minutes = 30): number {
-      const workingMinutesPerDay = 540 - 120; // 8:00-17:00 trừ nghỉ trưa 2h
-      const slotTotal = duration_minutes + break_minutes;
-      return Math.floor(workingMinutesPerDay / slotTotal);
-    }
-    // Hàm tính slot/tuần
-    function calcSlotsPerWeek(duration_minutes: number, break_minutes = 30, workingDays = 5): number {
-      return calcSlotsPerDay(duration_minutes, break_minutes) * workingDays;
-    }
-    const MAX_PER_DAY = calcSlotsPerDay(duration_minutes, BREAK_MINUTES);
-    const MAX_PER_WEEK = calcSlotsPerWeek(duration_minutes, BREAK_MINUTES, 5);
+  // Hàm tính slot/ngày
+  function calcSlotsPerDay(duration_minutes: number, break_minutes = 30): number {
+    const workingMinutesPerDay = 540 - 120; // 8:00-17:00 trừ nghỉ trưa 2h
+    const slotTotal = duration_minutes + break_minutes;
+    return Math.floor(workingMinutesPerDay / slotTotal);
+  }
+  // Hàm tính slot/tuần
+  function calcSlotsPerWeek(duration_minutes: number, break_minutes = 30, workingDays = 6): number {
+    return calcSlotsPerDay(duration_minutes, break_minutes) * workingDays;
+  }
+  const MAX_PER_DAY = calcSlotsPerDay(duration_minutes, BREAK_MINUTES);
+  const MAX_PER_WEEK = calcSlotsPerWeek(duration_minutes, BREAK_MINUTES, 6);
 
-    // Kiểm tra đầu vào như cũ
-    const start = new Date(start_time);
-    const end = new Date(end_time);
-    const now = new Date();
-    const maxDate = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000);
+  // Kiểm tra đầu vào như cũ
+  const start = new Date(start_time);
+  const end = new Date(end_time);
+  const now = new Date();
+  const maxDate = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000);
 
-    if (isNaN(start.getTime()) || isNaN(end.getTime()) || start >= end) {
-      throw new BadRequestException('Thời gian không hợp lệ');
-    }
-    if (start <= now || start > maxDate || start.getFullYear() > now.getFullYear()) {
-      throw new BadRequestException('Thời gian phải trong tương lai, trong 2 tháng, và không trước năm sau');
-    }
-    if (duration_minutes < 15 || duration_minutes > 120) {
-      throw new BadRequestException('Thời lượng slot phải từ 15 đến 120 phút');
-    }
+  if (isNaN(start.getTime()) || isNaN(end.getTime()) || start >= end) {
+    throw new BadRequestException('Thời gian không hợp lệ');
+  }
+  if (start <= now || start > maxDate || start.getFullYear() > now.getFullYear()) {
+    throw new BadRequestException('Thời gian phải trong tương lai, trong 2 tháng, và không trước năm sau');
+  }
+  if (duration_minutes < 15 || duration_minutes > 120) {
+    throw new BadRequestException('Thời lượng slot phải từ 15 đến 120 phút');
+  }
 
-    // Kiểm tra consultant, service như cũ
-    const consultant = await this.prisma.consultantProfile.findUnique({
-      where: { consultant_id: consultantId },
-    });
-    if (!consultant || !consultant.is_verified) {
-      throw new BadRequestException('Consultant không tồn tại hoặc chưa được xác minh');
-    }
+  // Kiểm tra consultant, service như cũ
+  const consultant = await this.prisma.consultantProfile.findUnique({
+    where: { consultant_id: consultantId },
+  });
+  if (!consultant || !consultant.is_verified) {
+    throw new BadRequestException('Consultant không tồn tại hoặc chưa được xác minh');
+  }
 
-    const service = await this.prisma.service.findUnique({
-      where: { service_id, deleted_at: null },
-    });
-    if (!service || service.type !== ServiceType.Consultation) {
-      throw new BadRequestException('Dịch vụ không tồn tại hoặc không phải tư vấn');
-    }
+  const service = await this.prisma.service.findUnique({
+    where: { service_id, deleted_at: null },
+  });
+  if (!service || service.type !== ServiceType.Consultation) {
+    throw new BadRequestException('Dịch vụ không tồn tại hoặc không phải tư vấn');
+  }
 
-    // Xác định tuần đầu tiên cần tạo (tính từ start)
-    const weekStart = new Date(start);
-    weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7)); // về thứ 2 tuần đó
-    weekStart.setHours(0, 0, 0, 0);
-    const weekEnd = new Date(weekStart);
-    weekEnd.setDate(weekEnd.getDate() + 4); // tới thứ 6
-    weekEnd.setHours(23, 59, 59, 999);
+  // Xác định tuần đầu tiên cần tạo (tính từ start)
+  const weekStart = new Date(start);
+  weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7)); // về thứ 2 tuần đó
+  weekStart.setHours(0,0,0,0);
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekEnd.getDate() + 5); // tới thứ 7
+  weekEnd.setHours(23,59,59,999);
 
-    // Đếm slot đã có trong tuần này
-    const weeklySchedules = await this.prisma.schedule.count({
-      where: {
-        consultant_id: consultantId,
-        start_time: { gte: weekStart, lte: weekEnd },
-        deleted_at: null,
-      },
-    });
+  // Đếm slot đã có trong tuần này
+  const weeklySchedules = await this.prisma.schedule.count({
+    where: {
+      consultant_id: consultantId,
+      start_time: { gte: weekStart, lte: weekEnd },
+      deleted_at: null,
+    },
+  });
 
-    let createdSchedules: any[] = [];
-    let curDay = new Date(start);
+  let createdSchedules: any[] = [];
+  let curDay = new Date(start);
 
-    // Duyệt từng ngày từ start đến end
-    while (curDay <= end) {
-      // Chỉ tạo slot nếu là Thứ 2-6
-      if (WORKING_DAYS.includes(curDay.getDay())) {
-        // Lấy giờ bắt đầu/kết thúc làm việc trong ngày hiện tại
-        let slotStart = new Date(
-          curDay.getFullYear(), curDay.getMonth(), curDay.getDate(),
-          WORK_START.hour, WORK_START.min, 0, 0
-        );
-        const dayEnd = new Date(
-          curDay.getFullYear(), curDay.getMonth(), curDay.getDate(),
-          WORK_END.hour, WORK_END.min, 0, 0
-        );
+  // Duyệt từng ngày từ start đến end
+  while (curDay <= end) {
+    // Chỉ tạo slot nếu là Thứ 2-7
+    if (WORKING_DAYS.includes(curDay.getDay())) {
+      // Lấy giờ bắt đầu/kết thúc làm việc trong ngày hiện tại
+      let slotStart = new Date(
+        curDay.getFullYear(), curDay.getMonth(), curDay.getDate(),
+        WORK_START.hour, WORK_START.min, 0, 0
+      );
+      const dayEnd = new Date(
+        curDay.getFullYear(), curDay.getMonth(), curDay.getDate(),
+        WORK_END.hour, WORK_END.min, 0, 0
+      );
 
-        // Đếm số slot đã có trong ngày này
-        const dailySchedules = await this.prisma.schedule.count({
-          where: {
-            consultant_id: consultantId,
-            start_time: { gte: slotStart, lte: dayEnd },
-            deleted_at: null,
-          },
-        });
-
-        let createdToday = 0;
-
-        while (
-          slotStart < dayEnd &&
-          createdToday + dailySchedules < MAX_PER_DAY &&
-          createdSchedules.length + weeklySchedules < MAX_PER_WEEK
-        ) {
-          const slotEnd = new Date(slotStart.getTime() + duration_minutes * 60 * 1000);
-
-          // Skip nếu slot rơi vào giờ nghỉ trưa
-          const isLunchBreak =
-            (slotStart.getHours() * 60 + slotStart.getMinutes()) < (LUNCH_BREAK_END.hour * 60 + LUNCH_BREAK_END.min) &&
-            (slotEnd.getHours() * 60 + slotEnd.getMinutes()) > (LUNCH_BREAK_START.hour * 60 + LUNCH_BREAK_START.min);
-
-          if (isLunchBreak) {
-            slotStart.setHours(LUNCH_BREAK_END.hour, LUNCH_BREAK_END.min, 0, 0);
-            continue;
-          }
-
-          if (slotEnd > dayEnd) break;
-
-          // Kiểm tra trùng lịch hẹn/lịch trống
-          const isOverlapping = await this.prisma.$transaction([
-            this.prisma.appointment.findFirst({
-              where: {
-                consultant_id: consultantId,
-                start_time: { lte: slotEnd },
-                end_time: { gte: slotStart },
-                status: { not: AppointmentStatus.Cancelled },
-                deleted_at: null,
-              },
-            }),
-            this.prisma.schedule.findFirst({
-              where: {
-                consultant_id: consultantId,
-                start_time: { lte: slotEnd },
-                end_time: { gte: slotStart },
-                deleted_at: null,
-              },
-            }),
-          ]);
-          const [overlappingAppointment, overlappingSchedule] = isOverlapping;
-          if (!overlappingAppointment && !overlappingSchedule) {
-            const schedule = await this.prisma.schedule.create({
-              data: {
-                consultant_id: consultantId,
-                service_id,
-                start_time: new Date(slotStart),
-                end_time: new Date(slotEnd),
-              },
-            });
-            createdSchedules.push(schedule);
-            createdToday++;
-          }
-          // slot tiếp theo: + BREAK_MINUTES
-          slotStart = new Date(slotEnd.getTime() + BREAK_MINUTES * 60 * 1000);
-        }
-      }
-      // Qua ngày tiếp theo
-      curDay.setDate(curDay.getDate() + 1);
-      curDay.setHours(0, 0, 0, 0);
-    }
-
-    // Thông báo như cũ
-    if (createdSchedules.length > 0) {
-      await this.prisma.notification.create({
-        data: {
-          user_id: consultant.user_id,
-          type: NotificationType.Email,
-          title: 'Tạo hàng loạt lịch trống thành công',
-          content: `Đã tạo ${createdSchedules.length} lịch trống cho dịch vụ ${service.name} từ ${start.toISOString()} đến ${end.toISOString()}.`,
-          status: NotificationStatus.Pending,
+      // Đếm số slot đã có trong ngày này
+      const dailySchedules = await this.prisma.schedule.count({
+        where: {
+          consultant_id: consultantId,
+          start_time: { gte: slotStart, lte: dayEnd },
+          deleted_at: null,
         },
       });
-    }
 
-    return {
-      created: createdSchedules.length,
-      schedules: createdSchedules,
-      serviceName: service.name,
-      message: createdSchedules.length > 0
-        ? 'Tạo hàng loạt lịch trống thành công'
-        : 'Không tạo được lịch do trùng hoặc vượt giới hạn',
-    };
+      let createdToday = 0;
+
+      while (
+        slotStart < dayEnd &&
+        createdToday + dailySchedules < MAX_PER_DAY &&
+        createdSchedules.length + weeklySchedules < MAX_PER_WEEK
+      ) {
+        const slotEnd = new Date(slotStart.getTime() + duration_minutes * 60 * 1000);
+
+        // Skip nếu slot rơi vào giờ nghỉ trưa
+        const isLunchBreak =
+          (slotStart.getHours()*60 + slotStart.getMinutes()) < (LUNCH_BREAK_END.hour*60 + LUNCH_BREAK_END.min) &&
+          (slotEnd.getHours()*60 + slotEnd.getMinutes()) > (LUNCH_BREAK_START.hour*60 + LUNCH_BREAK_START.min);
+
+        if (isLunchBreak) {
+          slotStart.setHours(LUNCH_BREAK_END.hour, LUNCH_BREAK_END.min, 0, 0);
+          continue;
+        }
+
+        if (slotEnd > dayEnd) break;
+
+        // Kiểm tra trùng lịch hẹn/lịch trống
+        const isOverlapping = await this.prisma.$transaction([
+          this.prisma.appointment.findFirst({
+            where: {
+              consultant_id: consultantId,
+              start_time: { lte: slotEnd },
+              end_time: { gte: slotStart },
+              status: { not: AppointmentStatus.Cancelled },
+              deleted_at: null,
+            },
+          }),
+          this.prisma.schedule.findFirst({
+            where: {
+              consultant_id: consultantId,
+              start_time: { lte: slotEnd },
+              end_time: { gte: slotStart },
+              deleted_at: null,
+            },
+          }),
+        ]);
+        const [overlappingAppointment, overlappingSchedule] = isOverlapping;
+        if (!overlappingAppointment && !overlappingSchedule) {
+          const schedule = await this.prisma.schedule.create({
+            data: {
+              consultant_id: consultantId,
+              service_id,
+              start_time: new Date(slotStart),
+              end_time: new Date(slotEnd),
+            },
+          });
+          createdSchedules.push(schedule);
+          createdToday++;
+        }
+        // slot tiếp theo: + BREAK_MINUTES
+        slotStart = new Date(slotEnd.getTime() + BREAK_MINUTES * 60 * 1000);
+      }
+    }
+    // Qua ngày tiếp theo
+    curDay.setDate(curDay.getDate() + 1);
+    curDay.setHours(0, 0, 0, 0);
   }
+
+  // Thông báo như cũ
+  if (createdSchedules.length > 0) {
+    await this.prisma.notification.create({
+      data: {
+        user_id: consultant.user_id,
+        type: NotificationType.Email,
+        title: 'Tạo hàng loạt lịch trống thành công',
+        content: `Đã tạo ${createdSchedules.length} lịch trống cho dịch vụ ${service.name} từ ${start.toISOString()} đến ${end.toISOString()}.`,
+        status: NotificationStatus.Pending,
+      },
+    });
+  }
+
+  return {
+    created: createdSchedules.length,
+    schedules: createdSchedules,
+    serviceName: service.name,
+    message: createdSchedules.length > 0
+      ? 'Tạo hàng loạt lịch trống thành công'
+      : 'Không tạo được lịch do trùng hoặc vượt giới hạn',
+  };
+}
+
 
 
 
